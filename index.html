@@ -1,0 +1,1054 @@
+<!DOCTYPE html>
+<html lang="de" class="h-full bg-slate-950 text-slate-100 select-none overflow-hidden">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="theme-color" content="#0f172a">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>Marine Nav PWA + Gemini AI Skipper</title>
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        marine: { 800: '#0b1329', 900: '#070b19', 950: '#03050d' },
+                        night: { bg: '#050000', card: '#1a0000', border: '#4a0000', text: '#ff3333', accent: '#ff0000' }
+                    }
+                }
+            }
+        };
+    </script>
+
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Leaflet CSS & JS for Maps -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <!-- App Manifest Injection -->
+    <link rel="manifest" href="manifest.json" id="manifest-placeholder">
+
+    <style>
+        * { -webkit-tap-highlight-color: transparent; }
+        
+        body.night-mode {
+            background-color: #050000 !important;
+            color: #ff3333 !important;
+        }
+        body.night-mode .night-theme-card {
+            background-color: rgba(30, 0, 0, 0.9) !important;
+            border-color: #550000 !important;
+            color: #ff4d4d !important;
+        }
+        body.night-mode .leaflet-tile-pane {
+            filter: brightness(0.4) invert(1) contrast(3) hue-rotate(170deg) saturate(8);
+        }
+        body.night-mode .night-text-red {
+            color: #ff0000 !important;
+            text-shadow: 0 0 8px rgba(255, 0, 0, 0.6);
+        }
+
+        .compass-ring {
+            transition: transform 0.15s ease-out;
+        }
+        
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.88);
+            backdrop-filter: blur(14px);
+            -webkit-backdrop-filter: blur(14px);
+        }
+
+        /* Custom Scrollbars */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: rgba(15, 23, 42, 0.6); }
+        ::-webkit-scrollbar-thumb { background: rgba(56, 189, 248, 0.3); border-radius: 4px; }
+    </style>
+</head>
+<body class="h-full flex flex-col font-sans transition-colors duration-300">
+
+    <!-- Top Bar Navigation Header -->
+    <header class="h-14 bg-slate-900/90 border-b border-slate-800/80 px-3 flex items-center justify-between z-30 shrink-0 glass-panel">
+        <div class="flex items-center gap-3">
+            <button id="btn-toggle-menu" class="w-10 h-10 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-95 flex items-center justify-center text-slate-200 transition">
+                <i class="fa-solid fa-bars text-lg"></i>
+            </button>
+            
+            <div class="flex items-center gap-2">
+                <img id="app-logo" src="logo.png" onerror="this.onerror=null; this.src='https://placehold.co/80x80/0f172a/38bdf8?text=NAV';" alt="Logo" class="w-8 h-8 rounded-lg object-cover border border-cyan-500/30">
+                <span class="font-bold tracking-wide text-sm sm:text-base bg-gradient-to-r from-cyan-400 via-sky-300 to-blue-500 bg-clip-text text-transparent">
+                    MarineNav <span class="text-xs px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 font-mono">AI</span>
+                </span>
+            </div>
+        </div>
+
+        <div class="flex items-center gap-2">
+            <!-- AI Quick Launch Button -->
+            <button id="btn-header-ai" class="px-3 py-1.5 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-semibold text-xs flex items-center gap-1.5 shadow-lg shadow-cyan-950 active:scale-95 transition">
+                <i class="fa-solid fa-brain text-cyan-200"></i>
+                <span class="hidden sm:inline">KI Skipper</span>
+            </button>
+
+            <!-- Data Mode Switcher -->
+            <button id="btn-data-mode" title="Daten-Spar-Modus" class="px-2.5 py-1.5 rounded-lg bg-emerald-950/80 border border-emerald-500/40 text-emerald-400 text-xs font-semibold flex items-center gap-1.5 active:scale-95 transition">
+                <i class="fa-solid fa-wifi text-xs"></i>
+                <span id="txt-data-mode">Ebene 0</span>
+            </button>
+
+            <!-- Night Mode Button -->
+            <button id="btn-night-mode" title="Nachtmodus (Rotlicht)" class="w-10 h-10 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-95 flex items-center justify-center text-amber-400 transition">
+                <i class="fa-solid fa-moon text-lg"></i>
+            </button>
+        </div>
+    </header>
+
+    <!-- Slide-Out Sidebar Drawer -->
+    <div id="drawer-menu" class="fixed inset-0 z-50 transform -translate-x-full transition-transform duration-300 flex">
+        <div id="drawer-backdrop" class="absolute inset-0 bg-black/60 backdrop-blur-sm"></div>
+        
+        <aside class="relative w-80 max-w-[85vw] h-full bg-slate-900 border-r border-slate-800 flex flex-col z-10 night-theme-card">
+            <div class="p-4 border-b border-slate-800 flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <img src="logo.png" onerror="this.onerror=null; this.src='https://placehold.co/80x80/0f172a/38bdf8?text=NAV';" alt="Logo" class="w-9 h-9 rounded-lg border border-cyan-500/40">
+                    <div>
+                        <h2 class="font-bold text-slate-100 text-sm">MarineNav Control</h2>
+                        <p class="text-xs text-cyan-400 font-mono">Gemini AI Edition</p>
+                    </div>
+                </div>
+                <button id="btn-close-drawer" class="w-8 h-8 rounded-lg bg-slate-800 text-slate-400 flex items-center justify-center hover:text-white">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+
+            <nav class="flex-1 overflow-y-auto p-3 space-y-1">
+                <button data-target="panel-dashboard" class="menu-nav-btn w-full px-3 py-2.5 rounded-xl bg-cyan-600/20 text-cyan-400 font-medium flex items-center gap-3 text-sm border border-cyan-500/30">
+                    <i class="fa-solid fa-compass w-5 text-center"></i>
+                    <span>Haupt-Cockpit & Karte</span>
+                </button>
+
+                <button id="menu-btn-ai" class="w-full px-3 py-2.5 rounded-xl bg-gradient-to-r from-blue-900/40 to-cyan-900/40 hover:from-blue-800/50 hover:to-cyan-800/50 text-cyan-300 font-medium flex items-center gap-3 text-sm border border-cyan-500/40 transition">
+                    <i class="fa-solid fa-wand-magic-sparkles text-cyan-400 w-5 text-center"></i>
+                    <span>KI Nautischer Skipper</span>
+                </button>
+                
+                <div class="pt-3 pb-1 px-3 text-[11px] font-bold text-slate-500 uppercase tracking-wider">Installierte Module</div>
+                
+                <div id="dynamic-modules-list" class="space-y-1">
+                    <div class="px-3 py-2 rounded-lg bg-slate-800/40 text-slate-400 text-xs flex items-center justify-between">
+                        <span><i class="fa-solid fa-brain mr-2 text-cyan-400"></i>Gemini AI Engine (Aktiv)</span>
+                        <span class="w-2 h-2 rounded-full bg-cyan-400 animate-pulse"></span>
+                    </div>
+                </div>
+            </nav>
+
+            <div class="p-3 border-t border-slate-800 bg-slate-950/60 text-xs text-slate-400 space-y-1">
+                <div class="flex justify-between items-center">
+                    <span>GPS Signal:</span>
+                    <span id="txt-gps-status" class="text-amber-400 font-mono">Suche Signal...</span>
+                </div>
+                <div class="flex justify-between items-center">
+                    <span>Genauigkeit:</span>
+                    <span id="txt-gps-accuracy" class="font-mono">-- m</span>
+                </div>
+            </div>
+        </aside>
+    </div>
+
+    <!-- Main Application Container -->
+    <main class="flex-1 relative overflow-hidden flex flex-col md:flex-row">
+        <div id="map-container" class="w-full h-full absolute inset-0 z-0"></div>
+
+        <!-- Overlay HUD -->
+        <div class="absolute inset-0 z-10 pointer-events-none p-3 flex flex-col justify-between md:flex-row md:items-start gap-3">
+            
+            <!-- Top Overlay: Compass & COG Display -->
+            <div class="pointer-events-auto self-center md:self-start bg-slate-900/80 backdrop-blur border border-slate-800/80 px-4 py-2 rounded-2xl flex items-center gap-4 shadow-xl night-theme-card">
+                <div class="relative w-10 h-10 flex items-center justify-center">
+                    <div id="compass-dial" class="compass-ring absolute inset-0 flex items-center justify-center text-cyan-400">
+                        <i class="fa-solid fa-location-arrow text-2xl"></i>
+                    </div>
+                </div>
+                <div>
+                    <div class="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">Kurs über Grund (COG)</div>
+                    <div class="text-xl font-bold font-mono text-slate-100"><span id="txt-heading">000</span>°</div>
+                </div>
+            </div>
+
+            <!-- Bottom / Side HUD: Speedometer & Drive Stats -->
+            <div class="pointer-events-auto w-full md:w-80 bg-slate-900/90 backdrop-blur-md border border-slate-800/90 rounded-2xl p-4 shadow-2xl night-theme-card flex flex-col gap-3">
+                
+                <button id="btn-toggle-unit" class="w-full bg-slate-950/80 border border-slate-800/80 hover:border-cyan-500/40 rounded-xl p-3 text-center transition active:scale-[0.98]">
+                    <div class="text-xs text-slate-400 font-medium tracking-wide flex items-center justify-center gap-1">
+                        <span>GESCHWINDIGKEIT</span>
+                        <i class="fa-solid fa-arrow-rotate-right text-[10px] text-cyan-400"></i>
+                    </div>
+                    <div class="flex items-baseline justify-center gap-2 my-1">
+                        <span id="txt-speed" class="text-5xl font-extrabold font-mono tracking-tight text-white night-text-red">0.0</span>
+                        <span id="txt-speed-unit" class="text-lg font-bold text-cyan-400 font-mono">km/h</span>
+                    </div>
+                    <div class="text-[11px] text-slate-500">Tippen zum Wechseln (km/h &harr; Knoten)</div>
+                </button>
+
+                <div class="grid grid-cols-3 gap-2 text-center">
+                    <div class="bg-slate-950/60 p-2 rounded-lg border border-slate-800/50">
+                        <div class="text-[10px] text-slate-400 font-semibold">MAX</div>
+                        <div class="text-sm font-bold font-mono text-slate-200"><span id="txt-speed-max">0.0</span></div>
+                    </div>
+                    <div class="bg-slate-950/60 p-2 rounded-lg border border-slate-800/50">
+                        <div class="text-[10px] text-slate-400 font-semibold">Ø SCHNITT</div>
+                        <div class="text-sm font-bold font-mono text-slate-200"><span id="txt-speed-avg">0.0</span></div>
+                    </div>
+                    <div class="bg-slate-950/60 p-2 rounded-lg border border-slate-800/50">
+                        <div class="text-[10px] text-slate-400 font-semibold">BESCHL.</div>
+                        <div class="text-sm font-bold font-mono text-slate-200"><span id="txt-accel">0.0</span> <span class="text-[9px]">m/s²</span></div>
+                    </div>
+                </div>
+
+                <div id="quick-action-bar" class="flex gap-2 pt-1">
+                    <button id="btn-recenter" class="flex-1 py-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs flex items-center justify-center gap-2 border border-slate-700/60 transition active:scale-95">
+                        <i class="fa-solid fa-crosshairs text-cyan-400"></i>
+                        <span>Zentrieren</span>
+                    </button>
+                    <button id="btn-hud-ai" class="flex-1 py-2 px-3 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-semibold text-xs flex items-center justify-center gap-2 shadow-lg transition active:scale-95">
+                        <i class="fa-solid fa-sparkles"></i>
+                        <span>KI Skipper</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- AI Nautischer Skipper Modal Dialog -->
+    <div id="ai-modal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-2 sm:p-4 bg-black/75 backdrop-blur-md">
+        <div class="w-full max-w-2xl h-[90vh] bg-slate-900 border border-cyan-500/30 rounded-2xl flex flex-col shadow-2xl overflow-hidden night-theme-card">
+            
+            <!-- Modal Header -->
+            <div class="p-3.5 bg-slate-950/80 border-b border-slate-800 flex items-center justify-between shrink-0">
+                <div class="flex items-center gap-2.5">
+                    <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center text-white shadow-md">
+                        <i class="fa-solid fa-brain"></i>
+                    </div>
+                    <div>
+                        <h3 class="font-bold text-sm text-slate-100 flex items-center gap-2">
+                            KI Nautischer Skipper
+                            <span class="text-[10px] px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 font-mono">Gemini 3</span>
+                        </h3>
+                        <p class="text-[11px] text-slate-400">Revier-Berater, Seezeichen-Analyse & Notruf-Assistent</p>
+                    </div>
+                </div>
+                <button id="btn-close-ai" class="w-8 h-8 rounded-lg bg-slate-800 text-slate-400 flex items-center justify-center hover:text-white transition">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+
+            <!-- Tabs Header -->
+            <div class="flex border-b border-slate-800 bg-slate-950/40 text-xs font-semibold text-slate-400 shrink-0">
+                <button id="tab-btn-chat" class="flex-1 py-2.5 border-b-2 border-cyan-400 text-cyan-300 bg-slate-900/50 flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-comments"></i> <span>Chat & Revier</span>
+                </button>
+                <button id="tab-btn-vision" class="flex-1 py-2.5 border-b-2 border-transparent hover:text-slate-200 flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-camera"></i> <span>Seezeichen Foto</span>
+                </button>
+                <button id="tab-btn-mayday" class="flex-1 py-2.5 border-b-2 border-transparent hover:text-slate-200 flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-triangle-exclamation text-rose-400"></i> <span>MAYDAY Funk</span>
+                </button>
+            </div>
+
+            <!-- Tab 1: Chat & Revier-Berater -->
+            <div id="tab-content-chat" class="flex-1 flex flex-col overflow-hidden">
+                <!-- Grounding and Quick Prompt Bar -->
+                <div class="p-2.5 bg-slate-950/60 border-b border-slate-800/80 flex flex-wrap items-center justify-between gap-2 shrink-0">
+                    <label class="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
+                        <input type="checkbox" id="chk-grounding" checked class="rounded border-slate-700 text-cyan-500 focus:ring-cyan-500 bg-slate-900">
+                        <span class="flex items-center gap-1.5"><i class="fa-solid fa-globe text-cyan-400"></i> Live Google Suche (Häfen & Wetter)</span>
+                    </label>
+
+                    <div class="flex items-center gap-1.5 text-[11px] text-slate-400">
+                        <i class="fa-solid fa-volume-high text-cyan-400"></i>
+                        <span>Stimme:</span>
+                        <select id="sel-voice" class="bg-slate-900 border border-slate-700 rounded px-1.5 py-0.5 text-xs text-slate-200">
+                            <option value="Zephyr">Zephyr (Hell)</option>
+                            <option value="Kore">Kore (Bestimmt)</option>
+                            <option value="Puck">Puck (Lebhaft)</option>
+                            <option value="Fenrir">Fenrir (Aktiv)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Quick Prompts Chips -->
+                <div class="p-2 bg-slate-900/80 border-b border-slate-800/50 flex gap-2 overflow-x-auto text-xs shrink-0">
+                    <button class="quick-chip whitespace-nowrap px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-cyan-500/20">
+                        ⚓ Nächste Häfen & Ankerplätze
+                    </button>
+                    <button class="quick-chip whitespace-nowrap px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-cyan-500/20">
+                        🌤️ Wetter & Wind-Beurteilung
+                    </button>
+                    <button class="quick-chip whitespace-nowrap px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-cyan-500/20">
+                        🌫️ Verhaltensregeln bei Nebel
+                    </button>
+                    <button class="quick-chip whitespace-nowrap px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-cyan-500/20">
+                        📻 VHF Kanal 16 Regeln
+                    </button>
+                </div>
+
+                <!-- Chat History Window -->
+                <div id="ai-chat-history" class="flex-1 p-3 overflow-y-auto space-y-3">
+                    <div class="bg-slate-800/60 border border-slate-700/60 rounded-xl p-3 text-xs leading-relaxed text-slate-200">
+                        <div class="font-bold text-cyan-400 mb-1 flex items-center gap-1.5">
+                            <i class="fa-solid fa-robot"></i> KI Skipper Bereit
+                        </div>
+                        Moin Kapitän! Ich kenne deine Live-GPS-Position (<span id="chat-live-pos" class="font-mono text-cyan-300">Warte auf GPS...</span>). Frag mich nach Hafeninfos, Wetterrisiken, Seemannschaft oder Motoren-Hilfe!
+                    </div>
+                </div>
+
+                <!-- Input Box -->
+                <div class="p-2.5 bg-slate-950/90 border-t border-slate-800 flex items-center gap-2 shrink-0">
+                    <input type="text" id="ai-chat-input" placeholder="Frage an den KI Skipper stellen..." class="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan-500">
+                    <button id="btn-send-chat" class="w-9 h-9 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white flex items-center justify-center transition active:scale-95">
+                        <i class="fa-solid fa-paper-plane text-xs"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Tab 2: Seezeichen & Wolken Foto-Identifikator -->
+            <div id="tab-content-vision" class="flex-1 flex-col overflow-y-auto p-4 space-y-4 hidden">
+                <div class="bg-slate-950/60 border border-slate-800 rounded-xl p-3 text-xs text-slate-300 space-y-2">
+                    <p class="font-semibold text-cyan-400 flex items-center gap-2">
+                        <i class="fa-solid fa-camera"></i> Visuelle Bordanalyse (Tonnen, Wolken, Schäden)
+                    </p>
+                    <p>Lade ein Foto einer Boje, Kardinaltonne, Wolkenformation oder eines technischen Problems hoch. Der KI Skipper analysiert das Bild sofort.</p>
+                </div>
+
+                <div class="flex flex-col items-center justify-center border-2 border-dashed border-slate-700 hover:border-cyan-500/50 rounded-2xl p-6 bg-slate-950/40 cursor-pointer text-center relative">
+                    <input type="file" id="input-vision-file" accept="image/*" class="absolute inset-0 opacity-0 cursor-pointer">
+                    <div id="vision-placeholder" class="space-y-2">
+                        <i class="fa-solid fa-cloud-arrow-up text-3xl text-cyan-400"></i>
+                        <div class="text-xs font-semibold text-slate-200">Foto auswählen oder schnappen</div>
+                        <div class="text-[10px] text-slate-500">PNG, JPG, WebP unterstützt</div>
+                    </div>
+                    <img id="vision-preview" class="hidden max-h-48 rounded-lg object-contain border border-slate-700">
+                </div>
+
+                <div class="space-y-2">
+                    <label class="text-xs font-semibold text-slate-400">Anweisung / Frage zum Bild:</label>
+                    <input type="text" id="vision-prompt-input" value="Identifiziere dieses Seezeichen/Objekt und erkläre die Seemannschafts-Regeln dazu." class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-cyan-500">
+                </div>
+
+                <button id="btn-analyze-vision" class="w-full py-2.5 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-semibold text-xs flex items-center justify-center gap-2 shadow-lg transition active:scale-95">
+                    <i class="fa-solid fa-magnifying-glass font-bold"></i>
+                    <span>Foto mit Gemini 3 Flash analysieren</span>
+                </button>
+
+                <div id="vision-result-container" class="hidden bg-slate-950/80 border border-slate-800 rounded-xl p-3 text-xs leading-relaxed text-slate-200 space-y-2">
+                    <div class="font-bold text-cyan-400 flex items-center justify-between">
+                        <span>Analyse-Ergebnis</span>
+                        <button id="btn-read-vision" class="text-xs text-cyan-300 hover:underline flex items-center gap-1">
+                            <i class="fa-solid fa-volume-high"></i> Vorleser
+                        </button>
+                    </div>
+                    <div id="vision-result-text" class="whitespace-pre-wrap"></div>
+                </div>
+            </div>
+
+            <!-- Tab 3: MAYDAY & PAN PAN Funk-Assistent -->
+            <div id="tab-content-mayday" class="flex-1 flex-col overflow-y-auto p-4 space-y-4 hidden">
+                <div class="bg-rose-950/40 border border-rose-500/30 rounded-xl p-3 text-xs text-rose-200 space-y-1">
+                    <div class="font-bold flex items-center gap-2 text-rose-400">
+                        <i class="fa-solid fa-triangle-exclamation text-base"></i> Notruf- & Funk-Generator (VHF Kanal 16)
+                    </div>
+                    Generiert automatisch einen exakten Vorlesetext für Notrufe auf Basis deiner aktuellen GPS-Echtzeitkoordinaten.
+                </div>
+
+                <div class="grid grid-cols-2 gap-2 text-xs">
+                    <div>
+                        <label class="block text-slate-400 mb-1">Dringlichkeit:</label>
+                        <select id="mayday-urgency" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-2 text-slate-200 font-semibold">
+                            <option value="MAYDAY">MAYDAY (Gefahr für Leib & Leben)</option>
+                            <option value="PAN PAN">PAN PAN (Dringlichkeitsmeldung)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-slate-400 mb-1">Notfall-Szenario:</label>
+                        <select id="mayday-scenario" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-2 text-slate-200">
+                            <option value="Wassereinbruch / Sinkt">Wassereinbruch / Sinken</option>
+                            <option value="Feuer an Bord">Feuer an Bord</option>
+                            <option value="Mann über Bord">Mann über Bord</option>
+                            <option value="Manövrierunfähig / Motorschaden">Manövrierunfähig / Motorausfall</option>
+                            <option value="Schwere Verletzung / Medizinisch">Medizinischer Notfall</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-2 text-xs">
+                    <div>
+                        <label class="block text-slate-400 mb-1">Schiffsname / Rufzeichen:</label>
+                        <input type="text" id="mayday-boat-name" value="MOTORBOOT DELFIN" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-2 text-slate-200 font-mono">
+                    </div>
+                    <div>
+                        <label class="block text-slate-400 mb-1">Personen an Bord (POB):</label>
+                        <input type="number" id="mayday-pob" value="2" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-2 text-slate-200 font-mono">
+                    </div>
+                </div>
+
+                <button id="btn-generate-mayday" class="w-full py-2.5 rounded-xl bg-rose-700 hover:bg-rose-600 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-lg transition active:scale-95">
+                    <i class="fa-solid fa-bullhorn"></i>
+                    <span>Exakten Notruf-Text generieren</span>
+                </button>
+
+                <div id="mayday-output-box" class="hidden space-y-2">
+                    <div class="p-3 bg-slate-950 border border-rose-500/40 rounded-xl font-mono text-xs text-rose-300 whitespace-pre-wrap leading-relaxed relative">
+                        <button id="btn-copy-mayday" class="absolute top-2 right-2 px-2 py-1 rounded bg-slate-800 text-[10px] text-slate-300 hover:text-white">
+                            <i class="fa-solid fa-copy"></i> Kopieren
+                        </button>
+                        <div id="mayday-script-text"></div>
+                    </div>
+
+                    <button id="btn-read-mayday" class="w-full py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-cyan-300 font-semibold text-xs flex items-center justify-center gap-2 border border-slate-700">
+                        <i class="fa-solid fa-volume-high"></i>
+                        <span>Sprechfunk-Meldung laut vorlesen (Gemini TTS)</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Audio Player Bar -->
+            <div id="ai-audio-bar" class="hidden p-2 bg-slate-950 border-t border-slate-800 flex items-center justify-between shrink-0">
+                <div class="flex items-center gap-2 text-xs text-cyan-400 font-mono">
+                    <i class="fa-solid fa-waveform animate-bounce"></i>
+                    <span id="ai-audio-status">Audio wird wiedergegeben...</span>
+                </div>
+                <button id="btn-stop-audio" class="px-2.5 py-1 rounded-lg bg-rose-950 border border-rose-500/40 text-rose-300 text-xs">
+                    <i class="fa-solid fa-stop"></i> Stopp
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        /* Modern Boating Web App Core Engine + Gemini AI Integration */
+        const NavApp = {
+            state: {
+                dataMode: 0,
+                nightMode: false,
+                unit: 'kmh',
+                speed: 0,
+                maxSpeed: 0,
+                speedHistory: [],
+                heading: 0,
+                lastPosition: [54.3233, 10.1394],
+                lastTime: null,
+                acceleration: 0,
+                modules: {},
+                geminiApiKey: "", // Automatic key provision at runtime
+                currentVisionBase64: null,
+                currentAudio: null
+            },
+
+            map: null,
+            userMarker: null,
+
+            init() {
+                console.log("NavApp Core Engine + Gemini AI initializing...");
+                this.initUIListeners();
+                this.initMap();
+                this.startGPSWatcher();
+                this.initOrientationListener();
+                this.initAIListeners();
+            },
+
+            initMap() {
+                this.map = L.map('map-container', {
+                    zoomControl: false,
+                    attributionControl: false
+                }).setView(this.state.lastPosition, 13);
+
+                this.tileLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    maxZoom: 18
+                }).addTo(this.map);
+
+                const boatIcon = L.divIcon({
+                    className: 'custom-boat-icon',
+                    html: `<div id="map-boat-marker" class="w-8 h-8 rounded-full bg-cyan-500/30 border-2 border-cyan-400 flex items-center justify-center shadow-lg transition-transform duration-300">
+                             <i class="fa-solid fa-location-arrow text-cyan-200 text-sm transform -rotate-45"></i>
+                           </div>`,
+                    iconSize: [32, 32],
+                    iconAnchor: [16, 16]
+                });
+
+                this.userMarker = L.marker(this.state.lastPosition, { icon: boatIcon }).addTo(this.map);
+            },
+
+            startGPSWatcher() {
+                const statusEl = document.getElementById('txt-gps-status');
+                const accuracyEl = document.getElementById('txt-gps-accuracy');
+
+                if ('geolocation' in navigator) {
+                    navigator.geolocation.watchPosition(
+                        (pos) => {
+                            const { latitude, longitude, speed, heading, accuracy } = pos.coords;
+                            const timestamp = pos.timestamp;
+
+                            statusEl.textContent = 'Aktiv';
+                            statusEl.className = 'text-emerald-400 font-mono';
+                            accuracyEl.textContent = `${Math.round(accuracy)} m`;
+
+                            this.updatePosition(latitude, longitude, speed, heading, timestamp);
+                        },
+                        (err) => {
+                            console.warn("GPS Warning:", err.message);
+                            statusEl.textContent = 'Kein Signal';
+                            statusEl.className = 'text-rose-400 font-mono';
+                        },
+                        { enableHighAccuracy: true, maximumAge: 1000, timeout: 10000 }
+                    );
+                } else {
+                    statusEl.textContent = 'Nicht unterstützt';
+                }
+            },
+
+            updatePosition(lat, lng, rawSpeed, rawHeading, timestamp) {
+                const currentPos = [lat, lng];
+                this.userMarker.setLatLng(currentPos);
+                if (this.autoCenter !== false) {
+                    this.map.panTo(currentPos);
+                }
+
+                let speedKmh = rawSpeed ? rawSpeed * 3.6 : 0;
+                
+                if (rawSpeed === null && this.state.lastPosition && this.state.lastTime) {
+                    const distMeters = this.map.distance(this.state.lastPosition, currentPos);
+                    const timeSec = (timestamp - this.state.lastTime) / 1000;
+                    if (timeSec > 0) {
+                        speedKmh = (distMeters / timeSec) * 3.6;
+                        const prevSpeedMs = (this.state.speed || 0) / 3.6;
+                        const currentSpeedMs = distMeters / timeSec;
+                        this.state.acceleration = (currentSpeedMs - prevSpeedMs) / timeSec;
+                    }
+                }
+
+                this.state.speed = speedKmh;
+                if (speedKmh > this.state.maxSpeed) this.state.maxSpeed = speedKmh;
+
+                this.state.speedHistory.push(speedKmh);
+                if (this.state.speedHistory.length > 50) this.state.speedHistory.shift();
+
+                if (rawHeading !== null && !isNaN(rawHeading)) {
+                    this.state.heading = Math.round(rawHeading);
+                }
+
+                this.state.lastPosition = currentPos;
+                this.state.lastTime = timestamp;
+
+                // Update live position text in chat
+                const posText = `${lat.toFixed(4)}° N, ${lng.toFixed(4)}° E`;
+                const chatPosEl = document.getElementById('chat-live-pos');
+                if (chatPosEl) chatPosEl.textContent = posText;
+
+                this.renderHUD();
+            },
+
+            renderHUD() {
+                const speedValEl = document.getElementById('txt-speed');
+                const speedUnitEl = document.getElementById('txt-speed-unit');
+                const maxValEl = document.getElementById('txt-speed-max');
+                const avgValEl = document.getElementById('txt-speed-avg');
+                const accelEl = document.getElementById('txt-accel');
+                const headingEl = document.getElementById('txt-heading');
+                const compassDial = document.getElementById('compass-dial');
+
+                let displaySpeed = this.state.speed;
+                let displayMax = this.state.maxSpeed;
+                let unitText = 'km/h';
+
+                if (this.state.unit === 'kts') {
+                    displaySpeed = this.state.speed * 0.539957;
+                    displayMax = this.state.maxSpeed * 0.539957;
+                    unitText = 'kn';
+                }
+
+                const avgSpeedKmh = this.state.speedHistory.length > 0 
+                    ? this.state.speedHistory.reduce((a, b) => a + b, 0) / this.state.speedHistory.length 
+                    : 0;
+                const displayAvg = this.state.unit === 'kts' ? avgSpeedKmh * 0.539957 : avgSpeedKmh;
+
+                speedValEl.textContent = displaySpeed.toFixed(1);
+                speedUnitEl.textContent = unitText;
+                maxValEl.textContent = `${displayMax.toFixed(1)} ${unitText}`;
+                avgValEl.textContent = `${displayAvg.toFixed(1)} ${unitText}`;
+                accelEl.textContent = this.state.acceleration.toFixed(2);
+                
+                headingEl.textContent = String(this.state.heading).padStart(3, '0');
+                if (compassDial) {
+                    compassDial.style.transform = `rotate(${this.state.heading}deg)`;
+                }
+            },
+
+            initOrientationListener() {
+                if (window.DeviceOrientationEvent) {
+                    window.addEventListener('deviceorientation', (e) => {
+                        if (e.webkitCompassHeading) {
+                            this.state.heading = Math.round(e.webkitCompassHeading);
+                            this.renderHUD();
+                        } else if (e.alpha && this.state.speed < 1) {
+                            this.state.heading = Math.round(360 - e.alpha);
+                            this.renderHUD();
+                        }
+                    }, true);
+                }
+            },
+
+            initUIListeners() {
+                const drawer = document.getElementById('drawer-menu');
+                document.getElementById('btn-toggle-menu').addEventListener('click', () => drawer.classList.remove('-translate-x-full'));
+                document.getElementById('btn-close-drawer').addEventListener('click', () => drawer.classList.add('-translate-x-full'));
+                document.getElementById('drawer-backdrop').addEventListener('click', () => drawer.classList.add('-translate-x-full'));
+
+                document.getElementById('btn-toggle-unit').addEventListener('click', () => {
+                    this.state.unit = this.state.unit === 'kmh' ? 'kts' : 'kmh';
+                    this.renderHUD();
+                });
+
+                document.getElementById('btn-data-mode').addEventListener('click', () => {
+                    this.state.dataMode = (this.state.dataMode + 1) % 4;
+                    document.getElementById('txt-data-mode').textContent = `Ebene ${this.state.dataMode}`;
+                    if (this.state.dataMode >= 2) {
+                        if (this.map.hasLayer(this.tileLayer)) this.map.removeLayer(this.tileLayer);
+                    } else {
+                        if (!this.map.hasLayer(this.tileLayer)) this.tileLayer.addTo(this.map);
+                    }
+                });
+
+                document.getElementById('btn-night-mode').addEventListener('click', () => {
+                    this.state.nightMode = !this.state.nightMode;
+                    document.body.classList.toggle('night-mode', this.state.nightMode);
+                });
+
+                document.getElementById('btn-recenter').addEventListener('click', () => {
+                    this.autoCenter = true;
+                    if (this.state.lastPosition) this.map.panTo(this.state.lastPosition);
+                });
+            },
+
+            initAIListeners() {
+                const aiModal = document.getElementById('ai-modal');
+                const openAI = () => aiModal.classList.remove('hidden');
+                const closeAI = () => aiModal.classList.add('hidden');
+
+                document.getElementById('btn-header-ai').addEventListener('click', openAI);
+                document.getElementById('btn-hud-ai').addEventListener('click', openAI);
+                document.getElementById('menu-btn-ai').addEventListener('click', () => {
+                    document.getElementById('drawer-menu').classList.add('-translate-x-full');
+                    openAI();
+                });
+                document.getElementById('btn-close-ai').addEventListener('click', closeAI);
+
+                // Tab Switcher
+                const tabs = {
+                    chat: { btn: 'tab-btn-chat', content: 'tab-content-chat' },
+                    vision: { btn: 'tab-btn-vision', content: 'tab-content-vision' },
+                    mayday: { btn: 'tab-btn-mayday', content: 'tab-content-mayday' }
+                };
+
+                Object.keys(tabs).forEach(key => {
+                    document.getElementById(tabs[key].btn).addEventListener('click', () => {
+                        Object.keys(tabs).forEach(k => {
+                            document.getElementById(tabs[k].content).classList.add('hidden');
+                            document.getElementById(tabs[k].btn).classList.remove('border-cyan-400', 'text-cyan-300', 'bg-slate-900/50');
+                            document.getElementById(tabs[k].btn).classList.add('border-transparent');
+                        });
+                        document.getElementById(tabs[key].content).classList.remove('hidden');
+                        document.getElementById(tabs[key].btn).classList.add('border-cyan-400', 'text-cyan-300', 'bg-slate-900/50');
+                    });
+                });
+
+                // Quick Chips
+                document.querySelectorAll('.quick-chip').forEach(chip => {
+                    chip.addEventListener('click', () => {
+                        const text = chip.textContent.trim();
+                        document.getElementById('ai-chat-input').value = text;
+                        this.sendChatMessage(text);
+                    });
+                });
+
+                // Send Chat
+                document.getElementById('btn-send-chat').addEventListener('click', () => {
+                    const val = document.getElementById('ai-chat-input').value.trim();
+                    if (val) this.sendChatMessage(val);
+                });
+                document.getElementById('ai-chat-input').addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') {
+                        const val = document.getElementById('ai-chat-input').value.trim();
+                        if (val) this.sendChatMessage(val);
+                    }
+                });
+
+                // Vision File Upload
+                const visionFileInput = document.getElementById('input-vision-file');
+                visionFileInput.addEventListener('change', (e) => {
+                    const file = e.target.files[0];
+                    if (file) {
+                        const reader = new FileReader();
+                        reader.onload = (evt) => {
+                            const base64 = evt.target.result.split(',')[1];
+                            this.state.currentVisionBase64 = base64;
+                            const imgPreview = document.getElementById('vision-preview');
+                            imgPreview.src = evt.target.result;
+                            imgPreview.classList.remove('hidden');
+                            document.getElementById('vision-placeholder').classList.add('hidden');
+                        };
+                        reader.readAsDataURL(file);
+                    }
+                });
+
+                document.getElementById('btn-analyze-vision').addEventListener('click', () => this.analyzeVisionImage());
+                document.getElementById('btn-read-vision').addEventListener('click', () => {
+                    const txt = document.getElementById('vision-result-text').textContent;
+                    if (txt) this.speakText(txt);
+                });
+
+                // MAYDAY Generator
+                document.getElementById('btn-generate-mayday').addEventListener('click', () => this.generateMaydayScript());
+                document.getElementById('btn-copy-mayday').addEventListener('click', () => {
+                    const scriptText = document.getElementById('mayday-script-text').textContent;
+                    const el = document.createElement('textarea');
+                    el.value = scriptText;
+                    document.body.appendChild(el);
+                    el.select();
+                    document.execCommand('copy');
+                    document.body.removeChild(el);
+                    alert("MAYDAY Skript in Zwischenablage kopiert!");
+                });
+                document.getElementById('btn-read-mayday').addEventListener('click', () => {
+                    const txt = document.getElementById('mayday-script-text').textContent;
+                    if (txt) this.speakText(txt);
+                });
+
+                document.getElementById('btn-stop-audio').addEventListener('click', () => {
+                    if (this.state.currentAudio) {
+                        this.state.currentAudio.pause();
+                        this.state.currentAudio = null;
+                    }
+                    document.getElementById('ai-audio-bar').classList.add('hidden');
+                });
+            },
+
+            async sendChatMessage(userText) {
+                const inputEl = document.getElementById('ai-chat-input');
+                const historyContainer = document.getElementById('ai-chat-history');
+                inputEl.value = '';
+
+                // Render User Bubble
+                const userBubble = document.createElement('div');
+                userBubble.className = 'bg-cyan-900/30 border border-cyan-500/30 rounded-xl p-3 text-xs leading-relaxed text-cyan-100 ml-6';
+                userBubble.innerHTML = `<div class="font-bold text-cyan-300 mb-1"><i class="fa-solid fa-user"></i> Du</div>${this.escapeHtml(userText)}`;
+                historyContainer.appendChild(userBubble);
+
+                // Render AI Loading Bubble
+                const aiBubble = document.createElement('div');
+                aiBubble.className = 'bg-slate-800/80 border border-slate-700 rounded-xl p-3 text-xs leading-relaxed text-slate-200 mr-6';
+                aiBubble.innerHTML = `<div class="font-bold text-cyan-400 mb-1 flex items-center gap-2"><i class="fa-solid fa-spinner fa-spin"></i> KI Skipper denkt nach...</div>...`;
+                historyContainer.appendChild(aiBubble);
+                historyContainer.scrollTop = historyContainer.scrollHeight;
+
+                const enableSearch = document.getElementById('chk-grounding').checked;
+                const pos = this.state.lastPosition;
+                const systemPrompt = `Du bist der erfahrene KI Skipper & Nautische Offizier auf dieser PWA Boot-Navigations-App. 
+                                     Aktueller Standort des Boots: ${pos[0].toFixed(4)}° N, ${pos[1].toFixed(4)}° E. 
+                                     Geschwindigkeit: ${this.state.speed.toFixed(1)} km/h, Kurs COG: ${this.state.heading}°.
+                                     Antworte präzise, seemannisch, verständlich auf Deutsch. Nutze Aufzählungspunkte für gute Lesbarkeit.`;
+
+                try {
+                    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${this.state.geminiApiKey}`;
+                    const payload = {
+                        contents: [{ parts: [{ text: userText }] }],
+                        systemInstruction: { parts: [{ text: systemPrompt }] }
+                    };
+                    if (enableSearch) {
+                        payload.tools = [{ "google_search": {} }];
+                    }
+
+                    const response = await fetch(apiUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    const result = await response.json();
+                    const candidate = result.candidates?.[0];
+                    let text = candidate?.content?.parts?.[0]?.text || "Keine Antwort vom KI Skipper erhalten.";
+
+                    // Parse Grounding Sources
+                    let sourcesHtml = '';
+                    const groundingAttributions = candidate?.groundingMetadata?.groundingAttributions;
+                    if (groundingAttributions && groundingAttributions.length > 0) {
+                        const validSources = groundingAttributions
+                            .map(attr => attr.web)
+                            .filter(web => web && web.uri && web.title);
+                        
+                        if (validSources.length > 0) {
+                            sourcesHtml = `<div class="mt-2 pt-2 border-t border-slate-700/60 text-[10px] text-slate-400">
+                                <span class="font-bold text-cyan-400"><i class="fa-solid fa-magnifying-glass"></i> Quellen:</span> 
+                                ${validSources.map(s => `<a href="${s.uri}" target="_blank" class="underline text-cyan-300 hover:text-white mr-2">${s.title}</a>`).join('')}
+                            </div>`;
+                        }
+                    }
+
+                    // Format text line breaks and bolding
+                    const formattedText = this.formatMarkdownText(text);
+
+                    aiBubble.innerHTML = `
+                        <div class="font-bold text-cyan-400 mb-1 flex items-center justify-between">
+                            <span><i class="fa-solid fa-robot"></i> KI Skipper</span>
+                            <button class="btn-speak-bubble text-xs text-cyan-300 hover:underline flex items-center gap-1">
+                                <i class="fa-solid fa-volume-high"></i> Vorleser
+                            </button>
+                        </div>
+                        <div>${formattedText}</div>
+                        ${sourcesHtml}
+                    `;
+
+                    aiBubble.querySelector('.btn-speak-bubble').addEventListener('click', () => this.speakText(text));
+
+                } catch (err) {
+                    console.error("Gemini Chat Error:", err);
+                    aiBubble.innerHTML = `<div class="text-rose-400"><i class="fa-solid fa-circle-exclamation"></i> Fehler bei der Verbindung zum KI Skipper: ${err.message}</div>`;
+                }
+
+                historyContainer.scrollTop = historyContainer.scrollHeight;
+            },
+
+            async analyzeVisionImage() {
+                if (!this.state.currentVisionBase64) {
+                    alert("Bitte erst ein Bild auswählen oder aufnehmen!");
+                    return;
+                }
+
+                const promptText = document.getElementById('vision-prompt-input').value.trim() || "Identifiziere dieses Objekt/Seezeichen und gib Seemannschafts-Anweisungen.";
+                const resultBox = document.getElementById('vision-result-container');
+                const resultTextEl = document.getElementById('vision-result-text');
+
+                resultBox.classList.remove('hidden');
+                resultTextEl.textContent = "Analyse läuft... Gemini 3 Flash wertet das Bild aus...";
+
+                const systemPrompt = "Du bist ein nautischer Vision-Spezialist. Analysiere das Bild von Seezeichen, Tonnen, Wolken oder Schiffsschäden präzise und gib Handlungsempfehlungen nach offiziellen KBR/KVR Schifffahrtsregeln.";
+
+                try {
+                    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${this.state.geminiApiKey}`;
+                    const payload = {
+                        contents: [{
+                            role: "user",
+                            parts: [
+                                { text: promptText },
+                                {
+                                    inlineData: {
+                                        mimeType: "image/jpeg",
+                                        data: this.state.currentVisionBase64
+                                    }
+                                }
+                            ]
+                        }],
+                        systemInstruction: { parts: [{ text: systemPrompt }] }
+                    };
+
+                    const response = await fetch(apiUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    const result = await response.json();
+                    const text = result?.candidates?.[0]?.content?.parts?.[0]?.text || "Keine Bildanalyse erhalten.";
+                    resultTextEl.textContent = text;
+
+                } catch (err) {
+                    console.error("Vision Error:", err);
+                    resultTextEl.textContent = "Fehler bei der Bildanalyse: " + err.message;
+                }
+            },
+
+            generateMaydayScript() {
+                const urgency = document.getElementById('mayday-urgency').value;
+                const scenario = document.getElementById('mayday-scenario').value;
+                const boatName = document.getElementById('mayday-boat-name').value.trim() || 'UNBEKANNTES BOOT';
+                const pob = document.getElementById('mayday-pob').value || '2';
+                const pos = this.state.lastPosition;
+
+                const latDeg = Math.floor(pos[0]);
+                const latMin = ((pos[0] - latDeg) * 60).toFixed(2);
+                const lngDeg = Math.floor(pos[1]);
+                const lngMin = ((pos[1] - lngDeg) * 60).toFixed(2);
+
+                const script = `${urgency}, ${urgency}, ${urgency}
+HIER IST: ${boatName}, ${boatName}, ${boatName}
+CALLSIGN: DE-NAV-GPS
+
+POSITION: ${latDeg}° ${latMin}' NORD, ${String(lngDeg).padStart(3, '0')}° ${lngMin}' OST
+NOTFALL: ${scenario.toUpperCase()}
+BENÖTIGEN SOFORTIGE HILFE
+PERSONEN AN BORD: ${pob} POB
+GESCHWINDIGKEIT: ${this.state.speed.toFixed(1)} KM/H - KURS: ${this.state.heading}°
+OVER`;
+
+                document.getElementById('mayday-script-text').textContent = script;
+                document.getElementById('mayday-output-box').classList.remove('hidden');
+            },
+
+            async speakText(text) {
+                const voiceName = document.getElementById('sel-voice').value || 'Zephyr';
+                const audioBar = document.getElementById('ai-audio-bar');
+                const statusEl = document.getElementById('ai-audio-status');
+
+                audioBar.classList.remove('hidden');
+                statusEl.textContent = `Generiere Audio (${voiceName})...`;
+
+                try {
+                    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${this.state.geminiApiKey}`;
+                    const payload = {
+                        contents: [{
+                            parts: [{ text: `Sprich seetauglich und klar auf Deutsch: ${text.substring(0, 400)}` }]
+                        }],
+                        generationConfig: {
+                            responseModalities: ["AUDIO"],
+                            speechConfig: {
+                                voiceConfig: {
+                                    prebuiltVoiceConfig: { voiceName: voiceName }
+                                }
+                            }
+                        }
+                    };
+
+                    const response = await fetch(apiUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    const result = await response.json();
+                    const part = result?.candidates?.[0]?.content?.parts?.[0];
+                    const audioData = part?.inlineData?.data;
+                    const mimeType = part?.inlineData?.mimeType;
+
+                    if (audioData && mimeType && mimeType.startsWith("audio/")) {
+                        let sampleRate = 24000;
+                        const rateMatch = mimeType.match(/rate=(\d+)/);
+                        if (rateMatch && rateMatch[1]) {
+                            sampleRate = parseInt(rateMatch[1], 10);
+                        }
+
+                        const pcmBuffer = this.base64ToArrayBuffer(audioData);
+                        const pcm16 = new Int16Array(pcmBuffer);
+                        const wavBlob = this.pcmToWav(pcm16, sampleRate);
+                        const audioUrl = URL.createObjectURL(wavBlob);
+
+                        if (this.state.currentAudio) {
+                            this.state.currentAudio.pause();
+                        }
+
+                        const audio = new Audio(audioUrl);
+                        this.state.currentAudio = audio;
+
+                        statusEl.textContent = "Spielt Sprachausgabe...";
+                        audio.play();
+
+                        audio.onended = () => {
+                            audioBar.classList.add('hidden');
+                        };
+                    } else {
+                        statusEl.textContent = "Kein Audio generiert.";
+                    }
+
+                } catch (err) {
+                    console.error("TTS Error:", err);
+                    statusEl.textContent = "TTS Fehler: " + err.message;
+                }
+            },
+
+            base64ToArrayBuffer(base64) {
+                const binaryString = window.atob(base64);
+                const len = binaryString.length;
+                const bytes = new Uint8Array(len);
+                for (let i = 0; i < len; i++) {
+                    bytes[i] = binaryString.charCodeAt(i);
+                }
+                return bytes.buffer;
+            },
+
+            pcmToWav(pcm16, sampleRate) {
+                const numChannels = 1;
+                const bytesPerSample = 2;
+                const blockAlign = numChannels * bytesPerSample;
+                const byteRate = sampleRate * blockAlign;
+                const dataSize = pcm16.length * bytesPerSample;
+                const buffer = new ArrayBuffer(44 + dataSize);
+                const view = new DataView(buffer);
+
+                const writeString = (v, offset, str) => {
+                    for (let i = 0; i < str.length; i++) {
+                        v.setUint8(offset + i, str.charCodeAt(i));
+                    }
+                };
+
+                writeString(view, 0, 'RIFF');
+                view.setUint32(4, 36 + dataSize, true);
+                writeString(view, 8, 'WAVE');
+                writeString(view, 12, 'fmt ');
+                view.setUint32(16, 16, true);
+                view.setUint16(20, 1, true);
+                view.setUint16(22, numChannels, true);
+                view.setUint32(24, sampleRate, true);
+                view.setUint32(28, byteRate, true);
+                view.setUint16(32, blockAlign, true);
+                view.setUint16(34, 16, true);
+                writeString(view, 36, 'data');
+                view.setUint32(40, dataSize, true);
+
+                const output = new Int16Array(buffer, 44, pcm16.length);
+                output.set(pcm16);
+
+                return new Blob([buffer], { type: 'audio/wav' });
+            },
+
+            escapeHtml(str) {
+                return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            },
+
+            formatMarkdownText(str) {
+                let html = this.escapeHtml(str);
+                html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+                html = html.replace(/\*(.*?)\*/g, '<em>$1</em>');
+                html = html.replace(/\n/g, '<br>');
+                return html;
+            },
+
+            registerModule(moduleConfig) {
+                if (!moduleConfig.id) return;
+                this.state.modules[moduleConfig.id] = moduleConfig;
+
+                const list = document.getElementById('dynamic-modules-list');
+                const item = document.createElement('button');
+                item.className = 'w-full px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs flex items-center justify-between border border-slate-700/50 transition';
+                item.innerHTML = `
+                    <span><i class="${moduleConfig.icon || 'fa-solid fa-cube'} mr-2 text-cyan-400"></i>${moduleConfig.name}</span>
+                    <i class="fa-solid fa-chevron-right text-[10px] text-slate-500"></i>
+                `;
+                item.onclick = () => {
+                    if (typeof moduleConfig.open === 'function') moduleConfig.open();
+                };
+                list.appendChild(item);
+
+                if (typeof moduleConfig.init === 'function') {
+                    moduleConfig.init(this);
+                }
+            }
+        };
+
+        window.onload = () => {
+            NavApp.init();
+        };
+    </script>
+</body>
+</html>
