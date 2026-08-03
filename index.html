@@ -168,7 +168,6 @@ button{font-family:inherit;}
   padding:2px 7px; border-radius:6px; pointer-events:none;
   border:1px solid var(--bn-line);
 }
-#bn-map{position:absolute; inset:0; background:var(--bn-deep-900);}
 
 .leaflet-control-attribution{ display:none !important; } /* eigenes, unrotiertes #bn-attribution wird stattdessen genutzt */
 .leaflet-control-zoom{display:none;} /* eigene Zoom-Controls */
@@ -742,6 +741,9 @@ const map = L.map('bn-map', {
   worldCopyJump: true,
   dragging: false,   // wir übernehmen Pan/Zoom/Rotation komplett selbst (siehe Gesten-Handling)
   touchZoom: false,
+  scrollWheelZoom: false,
+  doubleClickZoom: false,
+  boxZoom: false,
   tap: false,
   zoomSnap: 0,        // Fix: kein Runden auf ganze Zoomstufen -> Pinch-Zoom reagiert stufenlos
   zoomDelta: 1,        // Schrittweite für +/- Buttons bleibt 1 volle Stufe
@@ -944,9 +946,12 @@ gestureEl.addEventListener('pointermove', (e) => {
 
     // 3) Zoomen, verankert exakt am aktuellen Mittelpunkt zwischen den Fingern
     if (isFinite(currentDist) && currentDist > 0 && pinch.lastDist > 0){
-      const newZoom = map.getZoom() + Math.log2(currentDist / pinch.lastDist);
+      const rawZoom = map.getZoom() + Math.log2(currentDist / pinch.lastDist);
+      const newZoom = Math.min(Math.max(rawZoom, map.getMinZoom()), map.getMaxZoom());
       const anchor = screenPointToContainerPoint(currentMid);
-      map.setZoomAround(anchor, newZoom, { animate: false });
+      if (isFinite(anchor.x) && isFinite(anchor.y) && isFinite(newZoom)) {
+        map.setZoomAround(anchor, newZoom, { animate: false });
+      }
     }
 
     pinch = { lastDist: currentDist, lastAngle: currentAngle, lastMid: currentMid };
@@ -971,6 +976,19 @@ gestureEl.addEventListener('pointerup', endPointer);
 gestureEl.addEventListener('pointercancel', endPointer);
 gestureEl.addEventListener('pointerleave', endPointer);
 
+/* Rotationskonformes Mausrad-/Trackpad-Zoomen */
+gestureEl.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  followMode = false;
+  el.locateBtn.classList.remove('bn-active');
+  const zoomDelta = -e.deltaY * 0.002;
+  const rawZoom = map.getZoom() + zoomDelta;
+  const newZoom = Math.min(Math.max(rawZoom, map.getMinZoom()), map.getMaxZoom());
+  const anchor = screenPointToContainerPoint({ x: e.clientX, y: e.clientY });
+  if (isFinite(anchor.x) && isFinite(anchor.y) && isFinite(newZoom)) {
+    map.setZoomAround(anchor, newZoom, { animate: false });
+  }
+}, { passive: false });
 
 el.fullscreenBtn.addEventListener('click', () => {
   if (!document.fullscreenElement){
