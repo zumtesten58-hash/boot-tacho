@@ -734,7 +734,59 @@ function rotateMap(deg){
     const svg = iconEl && iconEl.querySelector('svg');
     if (svg) svg.style.transform = `rotate(${deg ? 0 : (state.lastPosition ? state.lastPosition.heading || 0 : 0)}deg)`;
   }
+  // Natives Leaflet-Dragging arbeitet in unrotierten Bildschirmkoordinaten und
+  // "verdreht" dadurch die Wischrichtung, sobald die Karte per CSS gedreht ist.
+  // Bei aktiver Rotation übernehmen wir das Dragging deshalb selbst (siehe unten).
+  if (deg){
+    map.dragging.disable();
+  } else {
+    map.dragging.enable();
+    dragPointerId = null;
+    lastDragPoint = null;
+  }
 }
+
+/* ---- Rotationskorrigiertes Dragging (Fix: Wischrichtung bei gedrehter Karte) ---- */
+let dragPointerId = null;
+let lastDragPoint = null;
+
+// Wandelt einen Bewegungsvektor in Bildschirmkoordinaten in den entsprechenden
+// Vektor im (unrotierten) internen Koordinatensystem der Karte um, indem die
+// Kartenrotation rückgängig gemacht wird.
+function screenDeltaToMapDelta(dx, dy){
+  const rad = state.mapRotation * Math.PI / 180;
+  const cos = Math.cos(rad), sin = Math.sin(rad);
+  return { x: dx * cos - dy * sin, y: dx * sin + dy * cos };
+}
+
+const bnMapEl = document.getElementById('bn-map');
+bnMapEl.addEventListener('pointerdown', (e) => {
+  if (!state.mapRotation) return; // ohne Rotation: natives Leaflet-Dragging übernimmt
+  if (e.pointerType === 'mouse' && e.button !== 0) return;
+  dragPointerId = e.pointerId;
+  lastDragPoint = { x: e.clientX, y: e.clientY };
+  try { bnMapEl.setPointerCapture(e.pointerId); } catch(err){}
+});
+bnMapEl.addEventListener('pointermove', (e) => {
+  if (!state.mapRotation || dragPointerId !== e.pointerId || !lastDragPoint) return;
+  const dxScreen = e.clientX - lastDragPoint.x;
+  const dyScreen = e.clientY - lastDragPoint.y;
+  lastDragPoint = { x: e.clientX, y: e.clientY };
+  const d = screenDeltaToMapDelta(dxScreen, dyScreen);
+  // Inhalt soll dem Finger folgen (Papier-Metapher), panBy erwartet die
+  // entgegengesetzte Richtung (Kamera-Konvention) -> negieren.
+  map.panBy([-d.x, -d.y], { animate: false, duration: 0, noMoveStart: true });
+});
+function bnEndDrag(e){
+  if (dragPointerId === e.pointerId){
+    dragPointerId = null;
+    lastDragPoint = null;
+    try { bnMapEl.releasePointerCapture(e.pointerId); } catch(err){}
+  }
+}
+bnMapEl.addEventListener('pointerup', bnEndDrag);
+bnMapEl.addEventListener('pointercancel', bnEndDrag);
+bnMapEl.addEventListener('pointerleave', bnEndDrag);
 
 el.fullscreenBtn.addEventListener('click', () => {
   if (!document.fullscreenElement){
