@@ -3,31 +3,37 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Boot-Tacho & Navigation</title>
+  <title>Boot Nav & Tacho</title>
 
-  <!-- Leaflet CSS für die OpenStreetMap Karte -->
+  <!-- Leaflet CSS für OpenStreetMap -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 
   <style>
+    /* Design-Variablen für Hell- und Dunkel-Modus */
     :root {
-      --bg-color: #0f172a;
-      --card-bg: rgba(30, 41, 59, 0.85);
-      --accent: #38bdf8;
-      --text: #f8fafc;
-      --text-dim: #94a3b8;
+      --bg-color: #f8fafc;
+      --card-bg: rgba(255, 255, 255, 0.9);
+      --card-border: #e2e8f0;
+      --text: #0f172a;
+      --text-muted: #64748b;
+      --accent: #0284c7;
+      --accent-hover: #0369a1;
       --danger: #ef4444;
-      --border: #334155;
+      --success: #10b981;
+      --shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
     }
 
-    /* Nachtmodus (Rotlicht-Design für die Nachtsicht) */
-    body.night-mode {
-      --bg-color: #000000;
-      --card-bg: rgba(20, 0, 0, 0.9);
-      --accent: #ff3333;
-      --text: #ff6666;
-      --text-dim: #990000;
-      --border: #440000;
-      filter: sepia(100%) hue-rotate(300deg) saturate(400%);
+    body.dark-theme {
+      --bg-color: #0b1120;
+      --card-bg: rgba(15, 23, 42, 0.9);
+      --card-border: #1e293b;
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+      --accent: #38bdf8;
+      --accent-hover: #7dd3fc;
+      --danger: #f87171;
+      --success: #34d399;
+      --shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
     }
 
     * {
@@ -36,6 +42,7 @@
       padding: 0;
       user-select: none;
       -webkit-user-select: none;
+      touch-action: manipulation;
     }
 
     body, html {
@@ -45,9 +52,10 @@
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
       background-color: var(--bg-color);
       color: var(--text);
+      transition: background-color 0.3s ease, color 0.3s ease;
     }
 
-    #app-container {
+    #app {
       display: flex;
       flex-direction: column;
       width: 100vw;
@@ -55,105 +63,110 @@
       position: relative;
     }
 
-    /* Top-Header Navigation */
+    /* Header Navigation Bar */
     header {
-      height: 56px;
+      height: 54px;
       background: var(--card-bg);
-      backdrop-filter: blur(10px);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
       display: flex;
       align-items: center;
       justify-content: space-between;
       padding: 0 12px;
-      border-bottom: 1px solid var(--border);
+      border-bottom: 1px solid var(--card-border);
       z-index: 1000;
     }
 
-    .header-left {
+    .header-left, .header-right {
       display: flex;
       align-items: center;
-      gap: 10px;
+      gap: 8px;
     }
 
-    .btn-icon {
-      background: transparent;
-      border: none;
+    .btn {
+      background: rgba(125, 125, 125, 0.1);
+      border: 1px solid var(--card-border);
       color: var(--text);
-      font-size: 24px;
+      padding: 6px 12px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
       cursor: pointer;
-      padding: 4px 8px;
-      border-radius: 6px;
-    }
-
-    .btn-icon:active {
-      background: var(--border);
-    }
-
-    .app-logo {
-      height: 36px;
-      max-width: 120px;
-      object-fit: contain;
-    }
-
-    .logo-fallback {
-      font-weight: bold;
-      font-size: 18px;
-      color: var(--accent);
-      display: flex;
+      display: inline-flex;
       align-items: center;
       gap: 6px;
     }
 
-    .header-actions {
-      display: flex;
-      gap: 8px;
+    .btn:active {
+      transform: scale(0.96);
     }
 
-    .toggle-btn {
-      background: var(--border);
-      color: var(--text);
-      border: 1px solid var(--border);
-      padding: 6px 10px;
-      border-radius: 6px;
-      font-size: 12px;
-      font-weight: bold;
-      cursor: pointer;
-    }
-
-    .toggle-btn.active {
+    .btn.active {
       background: var(--accent);
-      color: #0f172a;
+      color: #ffffff;
+      border-color: var(--accent);
     }
 
-    /* Hauptbereich Layout: Karte & Overlay */
+    .btn-rec.recording {
+      background: var(--danger);
+      color: #ffffff;
+      border-color: var(--danger);
+      animation: pulse 1.5s infinite;
+    }
+
+    @keyframes pulse {
+      0% { opacity: 1; }
+      50% { opacity: 0.6; }
+      100% { opacity: 1; }
+    }
+
+    .logo-container {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 700;
+      font-size: 16px;
+      color: var(--accent);
+    }
+
+    .app-logo-img {
+      height: 32px;
+      max-width: 100px;
+      object-fit: contain;
+    }
+
+    /* Hauptbereich Karte & Overlay */
     main {
       flex: 1;
       position: relative;
       width: 100%;
-      height: calc(100vh - 56px);
+      height: calc(100vh - 54px);
     }
 
     #map {
       width: 100%;
       height: 100%;
       z-index: 1;
-      background: #0f172a;
+      background: var(--bg-color);
     }
 
-    /* Klappmenü (Sidebar Links) */
+    /* Klappmenü (Sidebar links) */
     #sidebar {
       position: absolute;
       top: 0;
-      left: -280px;
-      width: 280px;
+      left: -300px;
+      width: 300px;
       height: 100%;
       background: var(--card-bg);
-      backdrop-filter: blur(12px);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
       z-index: 2000;
-      transition: left 0.3s ease;
-      border-right: 1px solid var(--border);
+      transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      border-right: 1px solid var(--card-border);
       display: flex;
       flex-direction: column;
       padding: 16px;
+      box-shadow: var(--shadow);
     }
 
     #sidebar.open {
@@ -164,9 +177,9 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-bottom: 20px;
-      padding-bottom: 10px;
-      border-bottom: 1px solid var(--border);
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--card-border);
+      margin-bottom: 16px;
     }
 
     .module-list {
@@ -176,77 +189,101 @@
       overflow-y: auto;
     }
 
-    .module-item {
+    .module-card {
       padding: 12px;
-      background: rgba(255, 255, 255, 0.05);
-      border-radius: 8px;
-      border: 1px solid var(--border);
-      cursor: pointer;
+      background: rgba(125, 125, 125, 0.08);
+      border: 1px solid var(--card-border);
+      border-radius: 10px;
+      font-size: 13px;
     }
 
-    #overlay-sidebar {
+    #sidebar-overlay {
       position: absolute;
       top: 0;
       left: 0;
       width: 100vw;
       height: 100vh;
-      background: rgba(0, 0, 0, 0.5);
+      background: rgba(0, 0, 0, 0.4);
       z-index: 1500;
       display: none;
     }
 
-    #overlay-sidebar.active {
+    #sidebar-overlay.active {
       display: block;
     }
 
-    /* Dashboard Instrumente Overlay (HUD) */
+    /* Wetter-Box Oben Rechts */
+    .weather-pill {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      background: var(--card-bg);
+      backdrop-filter: blur(10px);
+      border: 1px solid var(--card-border);
+      padding: 6px 12px;
+      border-radius: 20px;
+      z-index: 500;
+      font-size: 12px;
+      font-weight: 600;
+      box-shadow: var(--shadow);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    /* Multi-Touch Dashboard HUD Untern */
     .hud-panel {
       position: absolute;
       bottom: 16px;
       left: 50%;
       transform: translateX(-50%);
-      width: calc(100% - 32px);
-      max-width: 600px;
+      width: calc(100% - 24px);
+      max-width: 680px;
       background: var(--card-bg);
-      backdrop-filter: blur(10px);
-      border-radius: 16px;
-      border: 1px solid var(--border);
-      padding: 12px;
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border-radius: 18px;
+      border: 1px solid var(--card-border);
+      padding: 10px;
       z-index: 500;
       display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 8px;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 6px;
       text-align: center;
-      box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+      box-shadow: var(--shadow);
     }
 
-    .hud-box {
+    .hud-cell {
       display: flex;
       flex-direction: column;
       justify-content: center;
       align-items: center;
-      padding: 6px;
-      background: rgba(255, 255, 255, 0.03);
-      border-radius: 8px;
+      padding: 8px 4px;
+      background: rgba(125, 125, 125, 0.05);
+      border-radius: 12px;
+      border: 1px solid transparent;
+      transition: background 0.2s, border-color 0.2s;
     }
 
-    .hud-box.clickable {
+    .hud-cell.touchable {
       cursor: pointer;
     }
 
-    .hud-box.clickable:active {
-      background: rgba(56, 189, 248, 0.2);
+    .hud-cell.touchable:active {
+      background: rgba(2, 132, 199, 0.15);
+      border-color: var(--accent);
     }
 
     .hud-label {
       font-size: 10px;
-      color: var(--text-dim);
+      font-weight: 700;
+      color: var(--text-muted);
       text-transform: uppercase;
       letter-spacing: 0.5px;
     }
 
     .hud-value {
-      font-size: 22px;
+      font-size: 20px;
       font-weight: 800;
       color: var(--accent);
       margin: 2px 0;
@@ -254,99 +291,152 @@
 
     .hud-unit {
       font-size: 10px;
+      font-weight: 600;
       color: var(--text);
     }
 
-    /* Wetter Info-Box */
-    .weather-box {
+    /* Modal Dialog für Fahrtenbuch */
+    .modal {
       position: absolute;
-      top: 16px;
-      right: 16px;
-      background: var(--card-bg);
-      backdrop-filter: blur(10px);
-      border: 1px solid var(--border);
-      padding: 8px 12px;
-      border-radius: 10px;
-      z-index: 500;
-      font-size: 12px;
-      display: flex;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 3000;
+      display: none;
       align-items: center;
+      justify-content: center;
+      padding: 16px;
+    }
+
+    .modal.open {
+      display: flex;
+    }
+
+    .modal-content {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 16px;
+      width: 100%;
+      max-width: 480px;
+      max-height: 80vh;
+      display: flex;
+      flex-direction: column;
+      padding: 16px;
+      box-shadow: var(--shadow);
+    }
+
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--card-border);
+    }
+
+    .modal-body {
+      overflow-y: auto;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
       gap: 8px;
     }
 
-    /* Responsives Verhalten bei Querformat (Handy gekippt) */
+    .track-item {
+      padding: 10px;
+      background: rgba(125, 125, 125, 0.08);
+      border-radius: 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    /* Responsiv im Querformat (Handy gekippt) */
     @media (orientation: landscape) and (max-height: 500px) {
       header {
         height: 44px;
+        padding: 0 8px;
       }
       main {
         height: calc(100vh - 44px);
       }
       .hud-panel {
-        bottom: 8px;
-        padding: 6px;
+        bottom: 6px;
+        padding: 4px;
+        gap: 4px;
+      }
+      .hud-cell {
+        padding: 4px 2px;
       }
       .hud-value {
-        font-size: 18px;
+        font-size: 16px;
       }
     }
   </style>
 </head>
 <body>
 
-<div id="app-container">
+<div id="app">
   <!-- Header Navbar -->
   <header>
     <div class="header-left">
-      <button class="btn-icon" id="btn-menu">☰</button>
-      <!-- Logo Versuch mit Fallback falls logo.png nicht existiert -->
-      <img src="logo.png" alt="Logo" class="app-logo" id="app-logo" onerror="this.style.display='none'; document.getElementById('logo-fallback').style.display='flex';">
-      <div class="logo-fallback" id="logo-fallback" style="display: none;">
-        <span>⚓</span> BootNav
+      <button class="btn" id="btn-menu" aria-label="Menü öffnen">☰</button>
+      <div class="logo-container">
+        <img src="logo.png" alt="" class="app-logo-img" id="app-logo" onerror="this.style.display='none';">
+        <span id="logo-text">⚓ BootNav</span>
       </div>
     </div>
-    
-    <div class="header-actions">
-      <button class="toggle-btn" id="btn-datasave">Datensparen: AUS</button>
-      <button class="toggle-btn" id="btn-night">Nacht</button>
+
+    <div class="header-right">
+      <button class="btn btn-rec" id="btn-rec">● REC</button>
+      <button class="btn" id="btn-datasave">Datensparen: AUS</button>
+      <button class="btn" id="btn-theme">🌙</button>
     </div>
   </header>
 
-  <!-- Hauptinhalt (Karte + Overlay) -->
+  <!-- Hauptansicht (Karte & Overlays) -->
   <main>
     <div id="map"></div>
 
-    <!-- Wetteranzeige (Open-Meteo API) -->
-    <div class="weather-box" id="weather-box">
-      <span>Wetter:</span>
-      <strong id="weather-val">Warte auf GPS...</strong>
+    <!-- Live Wetter Pill -->
+    <div class="weather-pill" id="weather-pill">
+      <span>🌤️</span> <span id="weather-text">GPS Suche...</span>
     </div>
 
-    <!-- Tacho & Instrumente Overlay -->
+    <!-- Tacho / Instrumenten HUD (Klick/Touch zum Umschalten) -->
     <div class="hud-panel">
-      <!-- Speed (Klickbar für Einheiten-Wechsel) -->
-      <div class="hud-box clickable" id="box-speed">
+      <!-- Live Tempo -->
+      <div class="hud-cell touchable" id="box-speed">
         <span class="hud-label">Tempo</span>
         <span class="hud-value" id="val-speed">0.0</span>
-        <span class="hud-unit" id="unit-speed">kn</span>
+        <span class="hud-unit unit-toggle">kn</span>
       </div>
 
-      <!-- Kurs / Kompass -->
-      <div class="hud-box">
+      <!-- Kompass COG -->
+      <div class="hud-cell">
         <span class="hud-label">Kurs (COG)</span>
         <span class="hud-value" id="val-heading">---°</span>
         <span class="hud-unit">Grad</span>
       </div>
 
-      <!-- Max Geschwindigkeit -->
-      <div class="hud-box">
+      <!-- Max Speed -->
+      <div class="hud-cell touchable" id="box-maxspeed">
         <span class="hud-label">Max</span>
         <span class="hud-value" id="val-maxspeed">0.0</span>
-        <span class="hud-unit" id="unit-maxspeed">kn</span>
+        <span class="hud-unit unit-toggle">kn</span>
+      </div>
+
+      <!-- Durchschnitts-Speed -->
+      <div class="hud-cell touchable" id="box-avgspeed">
+        <span class="hud-label">Ø Tempo</span>
+        <span class="hud-value" id="val-avgspeed">0.0</span>
+        <span class="hud-unit unit-toggle">kn</span>
       </div>
 
       <!-- Beschleunigung -->
-      <div class="hud-box">
+      <div class="hud-cell">
         <span class="hud-label">Beschl.</span>
         <span class="hud-value" id="val-accel">0.0</span>
         <span class="hud-unit">m/s²</span>
@@ -354,52 +444,79 @@
     </div>
   </main>
 
-  <!-- Sidebar & Overlay -->
-  <div id="overlay-sidebar"></div>
+  <!-- Klapp-Sidebar -->
+  <div id="sidebar-overlay"></div>
   <div id="sidebar">
     <div class="sidebar-header">
-      <h3>Module & Tools</h3>
-      <button class="btn-icon" id="btn-close-menu">✕</button>
+      <h3>Navigation & Module</h3>
+      <button class="btn" id="btn-close-menu">✕</button>
     </div>
     <div class="module-list" id="module-list">
-      <div class="module-item">
-        <strong>GPS-Status:</strong> <span id="gps-status" style="color: #ef4444;">Inaktiv</span>
+      <div class="module-card">
+        <strong>GPS Status:</strong> <span id="gps-status" style="color:var(--danger)">Suche...</span>
       </div>
-      <!-- Hier tragen sich neue Module automatisch ein -->
+      <div class="module-card">
+        <button class="btn" id="btn-open-logbook" style="width:100%; justify-content:center;">📖 Fahrtenbuch & Export</button>
+      </div>
+      <!-- Hier tragen sich weitere extern geladene Module ein -->
+    </div>
+  </div>
+
+  <!-- Fahrtenbuch Modal Dialog -->
+  <div class="modal" id="modal-logbook">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>Lokales Fahrtenbuch</h3>
+        <button class="btn" id="btn-close-logbook">✕</button>
+      </div>
+      <div class="modal-body" id="logbook-list">
+        <!-- Gespeicherte Fahrten werden hier aufgelistet -->
+      </div>
+      <div style="margin-top:12px; display:flex; gap:8px;">
+        <input type="file" id="gpx-import-input" accept=".gpx" style="display:none;">
+        <button class="btn" id="btn-import-gpx" style="flex:1;">📥 GPX Importieren</button>
+      </div>
     </div>
   </div>
 </div>
 
-<!-- Leaflet JS für Kartenansicht -->
+<!-- Leaflet JS -->
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
 <script>
   /**
-   * Modul-System Architektur
-   * Ermöglicht das spätere Hinzufügen externer JS-Dateien im selben Ordner.
+   * Erweiterbare Modul-Schnittstelle
+   * Jedes zusätzliche Script im selben Ordner kann `window.NavApp.registerModule(...)` aufrufen.
    */
   window.NavApp = {
     modules: {},
     registerModule: function(id, moduleObj) {
       this.modules[id] = moduleObj;
       const list = document.getElementById('module-list');
-      const item = document.createElement('div');
-      item.className = 'module-item';
-      item.innerHTML = `<strong>${moduleObj.name || id}</strong><br><small>${moduleObj.description || ''}</small>`;
-      item.onclick = () => { if(moduleObj.init) moduleObj.init(); };
-      list.appendChild(item);
+      const card = document.createElement('div');
+      card.className = 'module-card';
+      card.innerHTML = `<strong>${moduleObj.name || id}</strong><br><small style="color:var(--text-muted);">${moduleObj.description || ''}</small>`;
+      if (moduleObj.init) {
+        card.style.cursor = 'pointer';
+        card.onclick = () => moduleObj.init();
+      }
+      list.appendChild(card);
     }
   };
 
-  // Anwendungs-Zustand (State)
+  // App State (Status)
   const state = {
-    unit: 'kn', // 'kn' oder 'kmh'
+    unit: 'kn', // 'kn' (Knoten) oder 'kmh' (km/h)
+    theme: 'dark', // 'light' oder 'dark'
     dataSave: false,
-    nightMode: false,
-    currentSpeedMS: 0,
+    recording: false,
+    speedMS: 0,
     maxSpeedMS: 0,
+    speedSamples: [],
     lastSpeedMS: 0,
-    lastTimestamp: 0,
+    lastTime: 0,
+    currentTrack: [],
+    savedTracks: JSON.parse(localStorage.getItem('boot_tracks') || '[]'),
     lat: null,
     lon: null
   };
@@ -408,73 +525,79 @@
   const btnMenu = document.getElementById('btn-menu');
   const btnCloseMenu = document.getElementById('btn-close-menu');
   const sidebar = document.getElementById('sidebar');
-  const overlaySidebar = document.getElementById('overlay-sidebar');
-  const btnNight = document.getElementById('btn-night');
+  const sidebarOverlay = document.getElementById('sidebar-overlay');
+  const btnTheme = document.getElementById('btn-theme');
   const btnDataSave = document.getElementById('btn-datasave');
-  const boxSpeed = document.getElementById('box-speed');
+  const btnRec = document.getElementById('btn-rec');
+  const btnOpenLogbook = document.getElementById('btn-open-logbook');
+  const btnCloseLogbook = document.getElementById('btn-close-logbook');
+  const modalLogbook = document.getElementById('modal-logbook');
 
-  // Klappmenü Steuerung
+  // Multi-Touch Event Listener für Tempo-Einheiten (Klick/Touch auf Tempo-Felder)
+  ['box-speed', 'box-maxspeed', 'box-avgspeed'].forEach(id => {
+    document.getElementById(id).onclick = () => {
+      state.unit = state.unit === 'kn' ? 'kmh' : 'kn';
+      document.querySelectorAll('.unit-toggle').forEach(el => el.innerText = state.unit);
+      renderUI();
+    };
+  });
+
+  // Sidebar Steuerung
   function toggleSidebar() {
     sidebar.classList.toggle('open');
-    overlaySidebar.classList.toggle('active');
+    sidebarOverlay.classList.toggle('active');
   }
   btnMenu.onclick = toggleSidebar;
   btnCloseMenu.onclick = toggleSidebar;
-  overlaySidebar.onclick = toggleSidebar;
+  sidebarOverlay.onclick = toggleSidebar;
 
-  // Nachtmodus Toggle
-  btnNight.onclick = () => {
-    state.nightMode = !state.nightMode;
-    document.body.classList.toggle('night-mode', state.nightMode);
-    btnNight.classList.toggle('active', state.nightMode);
+  // Theme Wechsel (Hell / Dunkel)
+  btnTheme.onclick = () => {
+    state.theme = state.theme === 'dark' ? 'light' : 'dark';
+    document.body.classList.toggle('dark-theme', state.theme === 'dark');
+    btnTheme.innerText = state.theme === 'dark' ? '🌙' : '☀️';
   };
+  document.body.classList.add('dark-theme');
 
-  // Datenspar-Modus Toggle
+  // Datenspar-Modus Toggle (Löscht geladene Kartenkacheln NICHT!)
   btnDataSave.onclick = () => {
     state.dataSave = !state.dataSave;
     btnDataSave.classList.toggle('active', state.dataSave);
     btnDataSave.innerText = state.dataSave ? 'Datensparen: EIN' : 'Datensparen: AUS';
-    
-    if (state.dataSave) {
-      if (mapTileLayer) map.removeLayer(mapTileLayer);
-    } else {
-      if (mapTileLayer) mapTileLayer.addTo(map);
-    }
   };
 
-  // Einheiten umschalten (Klick auf Speed Box)
-  boxSpeed.onclick = () => {
-    state.unit = state.unit === 'kn' ? 'kmh' : 'kn';
-    document.getElementById('unit-speed').innerText = state.unit;
-    document.getElementById('unit-maxspeed').innerText = state.unit;
-    updateUI();
-  };
-
-  // Karte initialisieren (Leaflet / OpenStreetMap)
+  // Karte initialisieren (Leaflet)
   const map = L.map('map', { zoomControl: false }).setView([51.1657, 10.4515], 6);
-  let mapTileLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  const tileLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 19,
     attribution: '© OpenStreetMap'
   }).addTo(map);
 
-  // Position-Marker auf der Karte
   const userMarker = L.marker([0, 0]).addTo(map);
+  const trackPolyline = L.polyline([], { color: '#0284c7', weight: 4 }).addTo(map);
 
-  // Umrechnungen
+  // Einheiten Umrechner
   function convertSpeed(ms) {
-    if (state.unit === 'kn') return (ms * 1.94384).toFixed(1); // m/s zu Knoten
-    return (ms * 3.6).toFixed(1); // m/s zu km/h
+    if (state.unit === 'kn') return (ms * 1.94384).toFixed(1);
+    return (ms * 3.6).toFixed(1);
   }
 
-  function updateUI() {
-    document.getElementById('val-speed').innerText = convertSpeed(state.currentSpeedMS);
+  function renderUI() {
+    document.getElementById('val-speed').innerText = convertSpeed(state.speedMS);
     document.getElementById('val-maxspeed').innerText = convertSpeed(state.maxSpeedMS);
+    
+    // Durchschnitt berechnen
+    if (state.speedSamples.length > 0) {
+      const avgMS = state.speedSamples.reduce((a, b) => a + b, 0) / state.speedSamples.length;
+      document.getElementById('val-avgspeed').innerText = convertSpeed(avgMS);
+    } else {
+      document.getElementById('val-avgspeed').innerText = '0.0';
+    }
   }
 
-  // Öffentliche Wetter API Abfrage (Open-Meteo - Kostenlos & Anonym)
+  // Öffentliche Wetter API Abfrage (Open-Meteo)
   let lastWeatherFetch = 0;
   async function fetchWeather(lat, lon) {
-    // Nur alle 10 Minuten abfragen oder bei aktivierten Daten sparen gar nicht neu laden
     if (state.dataSave || Date.now() - lastWeatherFetch < 600000) return;
     try {
       lastWeatherFetch = Date.now();
@@ -482,50 +605,45 @@
       const data = await res.json();
       if (data && data.current_weather) {
         const temp = data.current_weather.temperature;
-        const wind = (data.current_weather.windspeed * 0.539957).toFixed(1); // km/h zu Knoten
-        document.getElementById('weather-val').innerText = `${temp}°C | Wind: ${wind} kn`;
+        const windKn = (data.current_weather.windspeed * 0.539957).toFixed(1);
+        document.getElementById('weather-text').innerText = `${temp}°C | Wind: ${windKn} kn`;
       }
     } catch (e) {
-      document.getElementById('weather-val').innerText = 'Wetter N/A';
+      document.getElementById('weather-text').innerText = 'Wetter N/A';
     }
   }
 
-  // GPS Tracking via Browser Geolocation API (0 KB Datenverbrauch)
+  // GPS Live Tracking (0 KB Datenverbrauch)
   if ('geolocation' in navigator) {
-    document.getElementById('gps-status').innerText = 'Suche Signal...';
-    document.getElementById('gps-status').style.color = '#f59e0b';
-
     navigator.geolocation.watchPosition(
       (pos) => {
         document.getElementById('gps-status').innerText = 'Aktiv';
-        document.getElementById('gps-status').style.color = '#10b981';
+        document.getElementById('gps-status').style.color = 'var(--success)';
 
         const lat = pos.coords.latitude;
         const lon = pos.coords.longitude;
-        const speedMS = pos.coords.speed || 0; // m/s vom GPS
+        const speedMS = pos.coords.speed || 0;
         const heading = pos.coords.heading;
         const now = pos.timestamp;
 
         state.lat = lat;
         state.lon = lon;
+        state.speedMS = speedMS;
 
-        // Maximalgeschwindigkeit aktualisieren
         if (speedMS > state.maxSpeedMS) state.maxSpeedMS = speedMS;
+        if (speedMS > 0.5) state.speedSamples.push(speedMS);
 
-        // Beschleunigung berechnen (a = delta_v / delta_t)
-        if (state.lastTimestamp && now > state.lastTimestamp) {
-          const dt = (now - state.lastTimestamp) / 1000; // in Sekunden
+        // Beschleunigungs-Berechnung
+        if (state.lastTime && now > state.lastTime) {
+          const dt = (now - state.lastTime) / 1000;
           const dv = speedMS - state.lastSpeedMS;
-          const accel = (dv / dt).toFixed(2);
-          document.getElementById('val-accel').innerText = accel;
+          document.getElementById('val-accel').innerText = (dt > 0 ? (dv / dt) : 0).toFixed(2);
         }
 
-        state.currentSpeedMS = speedMS;
         state.lastSpeedMS = speedMS;
-        state.lastTimestamp = now;
+        state.lastTime = now;
 
-        // UI Anzeigen aktualisieren
-        updateUI();
+        renderUI();
 
         if (heading !== null && !isNaN(heading)) {
           document.getElementById('val-heading').innerText = `${Math.round(heading)}°`;
@@ -533,28 +651,134 @@
           document.getElementById('val-heading').innerText = '---°';
         }
 
-        // Kartenposition anpassen
         const latLng = [lat, lon];
         userMarker.setLatLng(latLng);
         map.panTo(latLng);
 
-        // Wetter für aktuelle Position abfragen
+        // Aufzeichnung wenn REC aktiv
+        if (state.recording) {
+          state.currentTrack.push({ lat, lon, speed: speedMS, time: new Date().toISOString() });
+          trackPolyline.addLatLng(latLng);
+        }
+
         fetchWeather(lat, lon);
       },
       (err) => {
         document.getElementById('gps-status').innerText = 'Fehler / Keines';
-        document.getElementById('gps-status').style.color = '#ef4444';
+        document.getElementById('gps-status').style.color = 'var(--danger)';
       },
-      {
-        enableHighAccuracy: true,
-        maximumAge: 1000,
-        timeout: 10000
-      }
+      { enableHighAccuracy: true, maximumAge: 1000, timeout: 10000 }
     );
-  } else {
-    document.getElementById('gps-status').innerText = 'Nicht unterstützt';
   }
+
+  // REC (Aufzeichnung) Start / Stop
+  btnRec.onclick = () => {
+    state.recording = !state.recording;
+    btnRec.classList.toggle('recording', state.recording);
+    btnRec.innerText = state.recording ? '■ STOP' : '● REC';
+
+    if (!state.recording && state.currentTrack.length > 0) {
+      // Fahrt speichern
+      const trackObj = {
+        id: Date.now(),
+        date: new Date().toLocaleString(),
+        points: state.currentTrack
+      };
+      state.savedTracks.push(trackObj);
+      localStorage.setItem('boot_tracks', JSON.stringify(state.savedTracks));
+      state.currentTrack = [];
+      alert('Fahrt erfolgreich im lokalen Speicher gesichert!');
+    }
+  };
+
+  // Fahrtenbuch Modal & Liste
+  function renderLogbook() {
+    const listEl = document.getElementById('logbook-list');
+    listEl.innerHTML = '';
+    if (state.savedTracks.length === 0) {
+      listEl.innerHTML = '<div style="text-align:center; padding:16px; color:var(--text-muted);">Keine Aufzeichnungen vorhanden</div>';
+      return;
+    }
+    state.savedTracks.forEach(tr => {
+      const item = document.createElement('div');
+      item.className = 'track-item';
+      item.innerHTML = `
+        <div>
+          <strong>${tr.date}</strong><br>
+          <small style="color:var(--text-muted);">${tr.points.length} Punkte</small>
+        </div>
+        <div style="display:flex; gap:6px;">
+          <button class="btn" onclick="exportGPX(${tr.id})">💾 GPX</button>
+          <button class="btn" style="color:var(--danger);" onclick="deleteTrack(${tr.id})">🗑️</button>
+        </div>
+      `;
+      listEl.appendChild(item);
+    });
+  }
+
+  btnOpenLogbook.onclick = () => {
+    renderLogbook();
+    modalLogbook.classList.add('open');
+  };
+  btnCloseLogbook.onclick = () => modalLogbook.classList.remove('open');
+
+  // GPX Export Funktion
+  window.exportGPX = function(id) {
+    const tr = state.savedTracks.find(t => t.id === id);
+    if (!tr) return;
+    let gpx = `<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="BootNav">\n<trk><name>Fahrt ${tr.date}</name><trkseg>\n`;
+    tr.points.forEach(p => {
+      gpx += `  <trkpt lat="${p.lat}" lon="${p.lon}"><time>${p.time}</time><speed>${p.speed}</speed></trkpt>\n`;
+    });
+    gpx += `</trkseg></trk>\n</gpx>`;
+
+    const blob = new Blob([gpx], { type: 'application/gpx+xml' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `track_${id}.gpx`;
+    a.click();
+  };
+
+  window.deleteTrack = function(id) {
+    state.savedTracks = state.savedTracks.filter(t => t.id !== id);
+    localStorage.setItem('boot_tracks', JSON.stringify(state.savedTracks));
+    renderLogbook();
+  };
+
+  // GPX Import Handler
+  document.getElementById('btn-import-gpx').onclick = () => document.getElementById('gpx-import-input').click();
+  document.getElementById('gpx-import-input').onchange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      const parser = new DOMParser();
+      const xmlDoc = parser.parseFromString(evt.target.result, "text/xml");
+      const pts = xmlDoc.getElementsByTagName("trkpt");
+      const importedPoints = [];
+      for (let i = 0; i < pts.length; i++) {
+        importedPoints.push({
+          lat: parseFloat(pts[i].getAttribute("lat")),
+          lon: parseFloat(pts[i].getAttribute("lon")),
+          speed: 0,
+          time: new Date().toISOString()
+        });
+      }
+      if (importedPoints.length > 0) {
+        state.savedTracks.push({
+          id: Date.now(),
+          date: `Importiert: ${file.name}`,
+          points: importedPoints
+        });
+        localStorage.setItem('boot_tracks', JSON.stringify(state.savedTracks));
+        renderLogbook();
+        alert('GPX-Datei erfolgreich importiert!');
+      }
+    };
+    reader.readAsText(file);
+  };
 </script>
 
 </body>
 </html>
+
