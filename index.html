@@ -529,6 +529,13 @@ button:focus-visible, .bn-map-btn:focus-visible, .bn-icon-btn:focus-visible{
         <button data-theme="light">Light</button>
       </div>
     </div>
+    <div class="bn-core-toggle-row">
+      <span>Bildschirm wach halten<br><span class="bn-sub">Kein Timeout auf See</span></span>
+      <div class="bn-unit-toggle" id="bn-wakelock-toggle">
+        <button data-wakelock="off" class="bn-active">Aus</button>
+        <button data-wakelock="on">Ein</button>
+      </div>
+    </div>
 
     <div class="bn-sidebar-section-label">Module (<span id="bn-module-count">0</span>)</div>
     <div id="bn-module-list">
@@ -601,7 +608,8 @@ const el = {
   locateBtn: $('bn-locate-btn'), compassBtn: $('bn-compass-btn'),
   zoomInBtn: $('bn-zoomin-btn'), zoomOutBtn: $('bn-zoomout-btn'), fullscreenBtn: $('bn-fullscreen-btn'),
   offlineBanner: $('bn-offline-banner'), hudSpeedCell: $('bn-hud-speed'),
-  bnMain: $('bn-main'), layerBtn: $('bn-layer-btn'), attributionText: $('bn-attribution-text')
+  bnMain: $('bn-main'), layerBtn: $('bn-layer-btn'), attributionText: $('bn-attribution-text'),
+  wakelockToggle: $('bn-wakelock-toggle')
 };
 
 /* ---------------- Toasts ---------------- */
@@ -677,6 +685,56 @@ el.hudSpeedCell.addEventListener('click', () => applySpeedUnit(state.speedUnit =
   applySpeedUnit(saved === 'kmh' ? 'kmh' : 'kn');
 })();
 
+/* ---------------- Bildschirm wach halten (Wake Lock) ---------------- */
+let wakeLockSentinel = null;
+let wakeLockWanted = false;
+
+async function acquireWakeLock(){
+  if (!('wakeLock' in navigator)) return false;
+  try {
+    wakeLockSentinel = await navigator.wakeLock.request('screen');
+    wakeLockSentinel.addEventListener('release', () => { wakeLockSentinel = null; });
+    return true;
+  } catch (err) {
+    console.warn('BootNav: Wake Lock konnte nicht aktiviert werden', err);
+    return false;
+  }
+}
+function releaseWakeLock(){
+  if (wakeLockSentinel) { wakeLockSentinel.release().catch(() => {}); wakeLockSentinel = null; }
+}
+function applyWakeLockSetting(on){
+  wakeLockWanted = on;
+  [...el.wakelockToggle.children].forEach(b => b.classList.toggle('bn-active', b.dataset.wakelock === (on ? 'on' : 'off')));
+  try { localStorage.setItem('bn-wakelock', on ? '1' : '0'); } catch(e){}
+  if (on){
+    if (!('wakeLock' in navigator)) {
+      showToast('Dieses Gerät/Browser unterstützt kein Wach-Halten des Bildschirms', 'warn');
+      return;
+    }
+    acquireWakeLock().then(ok => { if (ok) showToast('Bildschirm bleibt an', 'success'); });
+  } else {
+    releaseWakeLock();
+    showToast('Bildschirm-Timeout wieder normal', 'success');
+  }
+}
+el.wakelockToggle.addEventListener('click', (e) => {
+  const btn = e.target.closest('button[data-wakelock]');
+  if (btn) applyWakeLockSetting(btn.dataset.wakelock === 'on');
+});
+// Wake Lock wird vom System freigegeben, sobald der Tab in den Hintergrund geht —
+// beim Zurückkehren automatisch neu anfordern, falls gewünscht.
+document.addEventListener('visibilitychange', () => {
+  if (wakeLockWanted && document.visibilityState === 'visible' && !wakeLockSentinel) {
+    acquireWakeLock();
+  }
+});
+(function initWakeLock(){
+  let saved = null;
+  try { saved = localStorage.getItem('bn-wakelock'); } catch(e){}
+  if (saved === '1') applyWakeLockSetting(true);
+})();
+
 /* ---------------- Leaflet Karte ---------------- */
 const map = L.map('bn-map', {
   zoomControl: false,
@@ -685,6 +743,9 @@ const map = L.map('bn-map', {
   dragging: false,   // wir übernehmen Pan/Zoom/Rotation komplett selbst (siehe Gesten-Handling)
   touchZoom: false,
   tap: false,
+  zoomSnap: 0,        // Fix: kein Runden auf ganze Zoomstufen -> Pinch-Zoom reagiert stufenlos
+  zoomDelta: 1,        // Schrittweite für +/- Buttons bleibt 1 volle Stufe
+  wheelPxPerZoomLevel: 120,
   maxZoom: 19,
   minZoom: 3
 }).setView([54.3233, 10.1228], 12); // Startpunkt: Kieler Förde als sinnvoller maritimer Default
