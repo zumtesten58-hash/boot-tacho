@@ -1,39 +1,52 @@
 <!DOCTYPE html>
-<html lang="de">
+<html lang="de" data-theme="dark">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Boot Nav & Tacho</title>
-
-  <!-- Leaflet CSS für OpenStreetMap -->
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>BootNav - Maritime Navigation</title>
+  
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+  
   <style>
-    /* Design-Variablen für Hell- und Dunkel-Modus */
     :root {
-      --bg-color: #f8fafc;
-      --card-bg: rgba(255, 255, 255, 0.9);
-      --card-border: #e2e8f0;
-      --text: #0f172a;
+      /* Marine Dark Theme (Default) */
+      --bg-primary: #080d14;
+      --bg-surface: rgba(15, 23, 38, 0.85);
+      --bg-card: rgba(22, 34, 56, 0.75);
+      --bg-card-hover: rgba(30, 45, 74, 0.9);
+      --text-primary: #f1f5f9;
+      --text-secondary: #94a3b8;
       --text-muted: #64748b;
-      --accent: #0284c7;
-      --accent-hover: #0369a1;
-      --danger: #ef4444;
-      --success: #10b981;
-      --shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+      --accent-blue: #0284c7;
+      --accent-cyan: #06b6d4;
+      --accent-green: #10b981;
+      --accent-warning: #f59e0b;
+      --accent-danger: #ef4444;
+      --border-color: rgba(255, 255, 255, 0.12);
+      --border-focus: rgba(6, 182, 212, 0.5);
+      --glass-blur: blur(16px);
+      --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.4);
+      --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.6);
+      --header-height: 54px;
+      --hud-height: 84px;
+      --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     }
 
-    body.dark-theme {
-      --bg-color: #0b1120;
-      --card-bg: rgba(15, 23, 42, 0.9);
-      --card-border: #1e293b;
-      --text: #f8fafc;
+    [data-theme="light"] {
+      --bg-primary: #f8fafc;
+      --bg-surface: rgba(255, 255, 255, 0.88);
+      --bg-card: rgba(241, 245, 249, 0.9);
+      --bg-card-hover: rgba(226, 232, 240, 0.95);
+      --text-primary: #0f172a;
+      --text-secondary: #475569;
       --text-muted: #94a3b8;
-      --accent: #38bdf8;
-      --accent-hover: #7dd3fc;
-      --danger: #f87171;
-      --success: #34d399;
-      --shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+      --accent-blue: #0369a1;
+      --accent-cyan: #0891b2;
+      --border-color: rgba(0, 0, 0, 0.12);
+      --border-focus: rgba(8, 145, 178, 0.5);
+      --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.08);
+      --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.15);
     }
 
     * {
@@ -42,17 +55,16 @@
       padding: 0;
       user-select: none;
       -webkit-user-select: none;
-      touch-action: manipulation;
+      -webkit-touch-callout: none;
     }
 
     body, html {
       width: 100%;
       height: 100%;
       overflow: hidden;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-      background-color: var(--bg-color);
-      color: var(--text);
-      transition: background-color 0.3s ease, color 0.3s ease;
+      font-family: var(--font-family);
+      background-color: var(--bg-primary);
+      color: var(--text-primary);
     }
 
     #app {
@@ -60,725 +72,1089 @@
       flex-direction: column;
       width: 100vw;
       height: 100vh;
+      height: 100dvh;
       position: relative;
     }
 
-    /* Header Navigation Bar */
-    header {
-      height: 54px;
-      background: var(--card-bg);
-      backdrop-filter: blur(12px);
-      -webkit-backdrop-filter: blur(12px);
+    /* --- HEADER BAR --- */
+    .header-bar {
+      height: var(--header-height);
+      background: var(--bg-surface);
+      backdrop-filter: var(--glass-blur);
+      -webkit-backdrop-filter: var(--glass-blur);
+      border-bottom: 1px solid var(--border-color);
       display: flex;
       align-items: center;
       justify-content: space-between;
       padding: 0 12px;
-      border-bottom: 1px solid var(--card-border);
       z-index: 1000;
+      box-shadow: var(--shadow-sm);
     }
 
     .header-left, .header-right {
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: 10px;
     }
 
-    .btn {
-      background: rgba(125, 125, 125, 0.1);
-      border: 1px solid var(--card-border);
-      color: var(--text);
-      padding: 6px 12px;
-      border-radius: 8px;
-      font-size: 13px;
-      font-weight: 600;
+    .icon-btn {
+      background: transparent;
+      border: 1px solid var(--border-color);
+      color: var(--text-primary);
+      width: 42px;
+      height: 42px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.2rem;
       cursor: pointer;
-      display: inline-flex;
+      transition: all 0.2s ease;
+      touch-action: manipulation;
+    }
+
+    .icon-btn:active {
+      transform: scale(0.94);
+      background: var(--bg-card-hover);
+    }
+
+    .app-title {
+      font-size: 1.15rem;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      display: flex;
       align-items: center;
       gap: 6px;
+      color: var(--text-primary);
     }
 
-    .btn:active {
-      transform: scale(0.96);
+    .app-title span {
+      color: var(--accent-cyan);
     }
 
-    .btn.active {
-      background: var(--accent);
-      color: #ffffff;
-      border-color: var(--accent);
+    .gps-badge {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      padding: 5px 10px;
+      border-radius: 20px;
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
     }
 
-    .btn-rec.recording {
-      background: var(--danger);
-      color: #ffffff;
-      border-color: var(--danger);
-      animation: pulse 1.5s infinite;
+    .gps-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--accent-warning);
+    }
+
+    .gps-dot.active {
+      background: var(--accent-green);
+      box-shadow: 0 0 8px var(--accent-green);
+      animation: pulse 2s infinite;
+    }
+
+    .gps-dot.error {
+      background: var(--accent-danger);
     }
 
     @keyframes pulse {
       0% { opacity: 1; }
-      50% { opacity: 0.6; }
+      50% { opacity: 0.4; }
       100% { opacity: 1; }
     }
 
-    .logo-container {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      font-weight: 700;
-      font-size: 16px;
-      color: var(--accent);
-    }
-
-    .app-logo-img {
-      height: 32px;
-      max-width: 100px;
-      object-fit: contain;
-    }
-
-    /* Hauptbereich Karte & Overlay */
-    main {
+    /* --- MAP CONTAINER --- */
+    .map-wrapper {
       flex: 1;
       position: relative;
       width: 100%;
-      height: calc(100vh - 54px);
+      height: 100%;
+      z-index: 1;
     }
 
     #map {
       width: 100%;
       height: 100%;
-      z-index: 1;
-      background: var(--bg-color);
+      background: #0d1b2a;
     }
 
-    /* Klappmenü (Sidebar links) */
-    #sidebar {
-      position: absolute;
-      top: 0;
-      left: -300px;
-      width: 300px;
-      height: 100%;
-      background: var(--card-bg);
-      backdrop-filter: blur(16px);
-      -webkit-backdrop-filter: blur(16px);
-      z-index: 2000;
-      transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-      border-right: 1px solid var(--card-border);
-      display: flex;
-      flex-direction: column;
-      padding: 16px;
-      box-shadow: var(--shadow);
+    /* Custom Leaflet Controls Position */
+    .leaflet-control-container .leaflet-top.leaflet-left {
+      top: 12px;
+      left: 12px;
     }
 
-    #sidebar.open {
-      left: 0;
-    }
-
-    .sidebar-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding-bottom: 12px;
-      border-bottom: 1px solid var(--card-border);
-      margin-bottom: 16px;
-    }
-
-    .module-list {
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-      overflow-y: auto;
-    }
-
-    .module-card {
-      padding: 12px;
-      background: rgba(125, 125, 125, 0.08);
-      border: 1px solid var(--card-border);
-      border-radius: 10px;
-      font-size: 13px;
-    }
-
-    #sidebar-overlay {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100vw;
-      height: 100vh;
-      background: rgba(0, 0, 0, 0.4);
-      z-index: 1500;
-      display: none;
-    }
-
-    #sidebar-overlay.active {
-      display: block;
-    }
-
-    /* Wetter-Box Oben Rechts */
-    .weather-pill {
+    /* Map Overlay Widgets Container (Top-Right) */
+    .map-overlay-container {
       position: absolute;
       top: 12px;
       right: 12px;
-      background: var(--card-bg);
-      backdrop-filter: blur(10px);
-      border: 1px solid var(--card-border);
-      padding: 6px 12px;
-      border-radius: 20px;
-      z-index: 500;
-      font-size: 12px;
-      font-weight: 600;
-      box-shadow: var(--shadow);
+      z-index: 900;
       display: flex;
-      align-items: center;
-      gap: 6px;
+      flex-direction: column;
+      gap: 8px;
+      align-items: flex-end;
+      pointer-events: none;
     }
 
-    /* Multi-Touch Dashboard HUD Untern */
-    .hud-panel {
+    .map-overlay-widget {
+      pointer-events: auto;
+      background: var(--bg-surface);
+      backdrop-filter: var(--glass-blur);
+      -webkit-backdrop-filter: var(--glass-blur);
+      border: 1px solid var(--border-color);
+      padding: 8px 12px;
+      border-radius: 12px;
+      box-shadow: var(--shadow-sm);
+      font-size: 0.85rem;
+      color: var(--text-primary);
+      animation: fadeIn 0.3s ease;
+    }
+
+    /* Map Quick Actions Float Bar */
+    .map-quick-actions {
       position: absolute;
       bottom: 16px;
-      left: 50%;
-      transform: translateX(-50%);
-      width: calc(100% - 24px);
-      max-width: 680px;
-      background: var(--card-bg);
-      backdrop-filter: blur(14px);
-      -webkit-backdrop-filter: blur(14px);
-      border-radius: 18px;
-      border: 1px solid var(--card-border);
-      padding: 10px;
-      z-index: 500;
-      display: grid;
-      grid-template-columns: repeat(5, 1fr);
-      gap: 6px;
-      text-align: center;
-      box-shadow: var(--shadow);
-    }
-
-    .hud-cell {
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-      align-items: center;
-      padding: 8px 4px;
-      background: rgba(125, 125, 125, 0.05);
-      border-radius: 12px;
-      border: 1px solid transparent;
-      transition: background 0.2s, border-color 0.2s;
-    }
-
-    .hud-cell.touchable {
-      cursor: pointer;
-    }
-
-    .hud-cell.touchable:active {
-      background: rgba(2, 132, 199, 0.15);
-      border-color: var(--accent);
-    }
-
-    .hud-label {
-      font-size: 10px;
-      font-weight: 700;
-      color: var(--text-muted);
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-    }
-
-    .hud-value {
-      font-size: 20px;
-      font-weight: 800;
-      color: var(--accent);
-      margin: 2px 0;
-    }
-
-    .hud-unit {
-      font-size: 10px;
-      font-weight: 600;
-      color: var(--text);
-    }
-
-    /* Modal Dialog für Fahrtenbuch */
-    .modal {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100vw;
-      height: 100vh;
-      background: rgba(0, 0, 0, 0.5);
-      z-index: 3000;
-      display: none;
-      align-items: center;
-      justify-content: center;
-      padding: 16px;
-    }
-
-    .modal.open {
-      display: flex;
-    }
-
-    .modal-content {
-      background: var(--card-bg);
-      border: 1px solid var(--card-border);
-      border-radius: 16px;
-      width: 100%;
-      max-width: 480px;
-      max-height: 80vh;
-      display: flex;
-      flex-direction: column;
-      padding: 16px;
-      box-shadow: var(--shadow);
-    }
-
-    .modal-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 12px;
-      padding-bottom: 8px;
-      border-bottom: 1px solid var(--card-border);
-    }
-
-    .modal-body {
-      overflow-y: auto;
-      flex: 1;
+      right: 12px;
+      z-index: 900;
       display: flex;
       flex-direction: column;
       gap: 8px;
     }
 
-    .track-item {
-      padding: 10px;
-      background: rgba(125, 125, 125, 0.08);
+    .fab-btn {
+      background: var(--bg-surface);
+      backdrop-filter: var(--glass-blur);
+      -webkit-backdrop-filter: var(--glass-blur);
+      border: 1px solid var(--border-color);
+      color: var(--text-primary);
+      width: 46px;
+      height: 46px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.2rem;
+      cursor: pointer;
+      box-shadow: var(--shadow-sm);
+      transition: all 0.2s ease;
+    }
+
+    .fab-btn.active {
+      border-color: var(--accent-cyan);
+      color: var(--accent-cyan);
+      box-shadow: 0 0 12px rgba(6, 182, 212, 0.4);
+    }
+
+    /* --- SIDEBAR MENU --- */
+    .sidebar-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.6);
+      backdrop-filter: blur(4px);
+      z-index: 1100;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s ease;
+    }
+
+    .sidebar-backdrop.open {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .sidebar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      bottom: 0;
+      width: 320px;
+      max-width: 85vw;
+      background: var(--bg-surface);
+      backdrop-filter: var(--glass-blur);
+      -webkit-backdrop-filter: var(--glass-blur);
+      border-right: 1px solid var(--border-color);
+      z-index: 1200;
+      transform: translateX(-100%);
+      transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      display: flex;
+      flex-direction: column;
+      box-shadow: var(--shadow-lg);
+    }
+
+    .sidebar.open {
+      transform: translateX(0);
+    }
+
+    .sidebar-header {
+      height: var(--header-height);
+      padding: 0 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .sidebar-content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .sidebar-section-title {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--text-muted);
+      margin-bottom: 8px;
+      font-weight: 700;
+    }
+
+    .module-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .module-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 12px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .module-card:hover, .module-card:active {
+      background: var(--bg-card-hover);
+      border-color: var(--accent-cyan);
+    }
+
+    .module-icon {
+      width: 38px;
+      height: 38px;
       border-radius: 10px;
+      background: rgba(2, 132, 199, 0.15);
+      color: var(--accent-cyan);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.2rem;
+      flex-shrink: 0;
+    }
+
+    .module-info {
+      flex: 1;
+      overflow: hidden;
+    }
+
+    .module-name {
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin-bottom: 2px;
+    }
+
+    .module-desc {
+      font-size: 0.78rem;
+      color: var(--text-secondary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .sidebar-footer {
+      padding: 16px;
+      border-top: 1px solid var(--border-color);
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      text-align: center;
+    }
+
+    /* --- HUD INSTRUMENT DASHBOARD --- */
+    .hud-dashboard {
+      height: var(--hud-height);
+      background: var(--bg-surface);
+      backdrop-filter: var(--glass-blur);
+      -webkit-backdrop-filter: var(--glass-blur);
+      border-top: 1px solid var(--border-color);
+      z-index: 950;
+      display: flex;
+      align-items: center;
+      padding: 8px 12px;
+      gap: 8px;
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+
+    .hud-dashboard::-webkit-scrollbar {
+      display: none;
+    }
+
+    .hud-card {
+      flex: 1;
+      min-width: 95px;
+      height: 100%;
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 8px 10px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      position: relative;
+    }
+
+    .hud-label {
+      font-size: 0.68rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-secondary);
       display: flex;
       justify-content: space-between;
       align-items: center;
     }
 
-    /* Responsiv im Querformat (Handy gekippt) */
-    @media (orientation: landscape) and (max-height: 500px) {
-      header {
-        height: 44px;
-        padding: 0 8px;
-      }
-      main {
-        height: calc(100vh - 44px);
-      }
-      .hud-panel {
-        bottom: 6px;
-        padding: 4px;
-        gap: 4px;
-      }
-      .hud-cell {
-        padding: 4px 2px;
-      }
-      .hud-value {
-        font-size: 16px;
-      }
+    .hud-value-group {
+      display: flex;
+      align-items: baseline;
+      gap: 4px;
+    }
+
+    .hud-value {
+      font-size: 1.45rem;
+      font-weight: 800;
+      font-variant-numeric: tabular-nums;
+      color: var(--text-primary);
+      line-height: 1;
+    }
+
+    .hud-unit {
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--accent-cyan);
+    }
+
+    .unit-toggle-btn {
+      background: rgba(255, 255, 255, 0.08);
+      border: none;
+      color: var(--accent-cyan);
+      font-size: 0.65rem;
+      padding: 2px 6px;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+
+    /* Custom HUD Widget Slots from Modules */
+    .hud-custom-slot {
+      display: flex;
+      gap: 8px;
+    }
+
+    /* --- UNIVERSAL MODAL SYSTEM --- */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.7);
+      backdrop-filter: blur(8px);
+      z-index: 2000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.25s ease;
+    }
+
+    .modal-backdrop.open {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .modal-window {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-color);
+      border-radius: 20px;
+      width: 100%;
+      max-width: 540px;
+      max-height: 85vh;
+      display: flex;
+      flex-direction: column;
+      box-shadow: var(--shadow-lg);
+      transform: scale(0.92);
+      transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+      overflow: hidden;
+    }
+
+    .modal-backdrop.open .modal-window {
+      transform: scale(1);
+    }
+
+    .modal-header {
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .modal-title {
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+
+    .modal-body {
+      padding: 20px;
+      overflow-y: auto;
+      color: var(--text-primary);
+      font-size: 0.95rem;
+      line-height: 1.5;
+    }
+
+    .modal-footer {
+      padding: 12px 20px;
+      border-top: 1px solid var(--border-color);
+      display: flex;
+      justify-content: flex-end;
+    }
+
+    .btn-primary {
+      background: var(--accent-blue);
+      color: #fff;
+      border: none;
+      padding: 8px 18px;
+      border-radius: 8px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    /* Custom Leaflet Boat Marker Icon Styling */
+    .boat-marker-container {
+      width: 40px;
+      height: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: transform 0.3s ease-out;
+    }
+
+    .boat-svg {
+      width: 32px;
+      height: 32px;
+      filter: drop-shadow(0 2px 6px rgba(0,0,0,0.6));
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(-6px); }
+      to { opacity: 1; transform: translateY(0); }
     }
   </style>
 </head>
 <body>
 
-<div id="app">
-  <!-- Header Navbar -->
-  <header>
-    <div class="header-left">
-      <button class="btn" id="btn-menu" aria-label="Menü öffnen">☰</button>
-      <div class="logo-container">
-        <img src="logo.png" alt="" class="app-logo-img" id="app-logo" onerror="this.style.display='none';">
-        <span id="logo-text">⚓ BootNav</span>
+  <div id="app">
+    <!-- HEADER BAR -->
+    <header class="header-bar">
+      <div class="header-left">
+        <button class="icon-btn" id="btnToggleSidebar" aria-label="Menü öffnen">☰</button>
+        <div class="app-title">⚓ BootNav <span>Core</span></div>
       </div>
-    </div>
-
-    <div class="header-right">
-      <button class="btn btn-rec" id="btn-rec">● REC</button>
-      <button class="btn" id="btn-datasave">Datensparen: AUS</button>
-      <button class="btn" id="btn-theme">🌙</button>
-    </div>
-  </header>
-
-  <!-- Hauptansicht (Karte & Overlays) -->
-  <main>
-    <div id="map"></div>
-
-    <!-- Live Wetter Pill -->
-    <div class="weather-pill" id="weather-pill">
-      <span>🌤️</span> <span id="weather-text">GPS Suche...</span>
-    </div>
-
-    <!-- Tacho / Instrumenten HUD (Klick/Touch zum Umschalten) -->
-    <div class="hud-panel">
-      <!-- Live Tempo -->
-      <div class="hud-cell touchable" id="box-speed">
-        <span class="hud-label">Tempo</span>
-        <span class="hud-value" id="val-speed">0.0</span>
-        <span class="hud-unit unit-toggle">kn</span>
+      <div class="header-right">
+        <div class="gps-badge">
+          <div class="gps-dot" id="gpsDot"></div>
+          <span id="gpsStatusText">GPS Suchen...</span>
+        </div>
+        <button class="icon-btn" id="btnThemeToggle" title="Design umschalten">🌙</button>
       </div>
+    </header>
 
-      <!-- Kompass COG -->
-      <div class="hud-cell">
-        <span class="hud-label">Kurs (COG)</span>
-        <span class="hud-value" id="val-heading">---°</span>
-        <span class="hud-unit">Grad</span>
+    <!-- MAP VIEWPORT -->
+    <main class="map-wrapper">
+      <div id="map"></div>
+
+      <!-- Top Right Module Overlay Widgets Drop-zone -->
+      <div class="map-overlay-container" id="overlayContainer"></div>
+
+      <!-- Floating Map Action Buttons -->
+      <div class="map-quick-actions">
+        <button class="fab-btn active" id="btnFollowBoat" title="Auf Boot zentrieren">🎯</button>
+        <button class="fab-btn" id="btnSimulateGps" title="GPS Demo-Modus">⛵</button>
       </div>
+    </main>
 
-      <!-- Max Speed -->
-      <div class="hud-cell touchable" id="box-maxspeed">
-        <span class="hud-label">Max</span>
-        <span class="hud-value" id="val-maxspeed">0.0</span>
-        <span class="hud-unit unit-toggle">kn</span>
+    <!-- HUD / INSTRUMENT DASHBOARD -->
+    <footer class="hud-dashboard" id="hudDashboard">
+      <!-- Speed Card -->
+      <div class="hud-card">
+        <div class="hud-label">
+          Speed (SOG)
+          <button class="unit-toggle-btn" id="btnToggleUnit">kn</button>
+        </div>
+        <div class="hud-value-group">
+          <div class="hud-value" id="hudSpeed">0.0</div>
+          <div class="hud-unit" id="hudSpeedUnit">kn</div>
+        </div>
       </div>
 
-      <!-- Durchschnitts-Speed -->
-      <div class="hud-cell touchable" id="box-avgspeed">
-        <span class="hud-label">Ø Tempo</span>
-        <span class="hud-value" id="val-avgspeed">0.0</span>
-        <span class="hud-unit unit-toggle">kn</span>
+      <!-- Heading / Course Over Ground -->
+      <div class="hud-card">
+        <div class="hud-label">Kurs (COG)</div>
+        <div class="hud-value-group">
+          <div class="hud-value" id="hudHeading">---</div>
+          <div class="hud-unit">°</div>
+        </div>
       </div>
 
-      <!-- Beschleunigung -->
-      <div class="hud-cell">
-        <span class="hud-label">Beschl.</span>
-        <span class="hud-value" id="val-accel">0.0</span>
-        <span class="hud-unit">m/s²</span>
+      <!-- GPS Accuracy -->
+      <div class="hud-card">
+        <div class="hud-label">GPS Gen.</div>
+        <div class="hud-value-group">
+          <div class="hud-value" id="hudAccuracy">--</div>
+          <div class="hud-unit">m</div>
+        </div>
       </div>
-    </div>
-  </main>
 
-  <!-- Klapp-Sidebar -->
-  <div id="sidebar-overlay"></div>
-  <div id="sidebar">
+      <!-- Dynamischer Slot für zusätzliche Module-Widgets -->
+      <div class="hud-custom-slot" id="hudCustomSlot"></div>
+    </footer>
+  </div>
+
+  <!-- SIDEBAR DRAWER -->
+  <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+  <aside class="sidebar" id="sidebar">
     <div class="sidebar-header">
-      <h3>Navigation & Module</h3>
-      <button class="btn" id="btn-close-menu">✕</button>
+      <div class="app-title">⚓ BootNav <span>Erweiterungen</span></div>
+      <button class="icon-btn" id="btnCloseSidebar">✕</button>
     </div>
-    <div class="module-list" id="module-list">
-      <div class="module-card">
-        <strong>GPS Status:</strong> <span id="gps-status" style="color:var(--danger)">Suche...</span>
+    <div class="sidebar-content">
+      <div>
+        <div class="sidebar-section-title">Registrierte Module</div>
+        <div class="module-list" id="moduleList">
+          <!-- Dynamisch erzeugte Module -->
+        </div>
       </div>
-      <div class="module-card">
-        <button class="btn" id="btn-open-logbook" style="width:100%; justify-content:center;">📖 Fahrtenbuch & Export</button>
+      
+      <div>
+        <div class="sidebar-section-title">System-Funktionen</div>
+        <div class="module-list">
+          <div class="module-card" id="btnSystemInfo">
+            <div class="module-icon">ℹ️</div>
+            <div class="module-info">
+              <div class="module-name">System-Status</div>
+              <div class="module-desc">Systemdiagnose & Sensor-Info</div>
+            </div>
+          </div>
+        </div>
       </div>
-      <!-- Hier tragen sich weitere extern geladene Module ein -->
     </div>
-  </div>
+    <div class="sidebar-footer">
+      BootNav Open Framework v1.0 • Ready for GitHub Pages
+    </div>
+  </aside>
 
-  <!-- Fahrtenbuch Modal Dialog -->
-  <div class="modal" id="modal-logbook">
-    <div class="modal-content">
+  <!-- UNIVERSAL MODAL -->
+  <div class="modal-backdrop" id="modalBackdrop">
+    <div class="modal-window">
       <div class="modal-header">
-        <h3>Lokales Fahrtenbuch</h3>
-        <button class="btn" id="btn-close-logbook">✕</button>
+        <div class="modal-title" id="modalTitle">Modal Titel</div>
+        <button class="icon-btn" id="btnCloseModal">✕</button>
       </div>
-      <div class="modal-body" id="logbook-list">
-        <!-- Gespeicherte Fahrten werden hier aufgelistet -->
+      <div class="modal-body" id="modalBody">
+        Content...
       </div>
-      <div style="margin-top:12px; display:flex; gap:8px;">
-        <input type="file" id="gpx-import-input" accept=".gpx" style="display:none;">
-        <button class="btn" id="btn-import-gpx" style="flex:1;">📥 GPX Importieren</button>
+      <div class="modal-footer">
+        <button class="btn-primary" id="btnConfirmModal">Schließen</button>
       </div>
     </div>
   </div>
-</div>
 
-<!-- Leaflet JS -->
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <!-- Leaflet JS CDN -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 
-<script>
-  /**
-   * Erweiterbare Modul-Schnittstelle
-   * Jedes zusätzliche Script im selben Ordner kann `window.NavApp.registerModule(...)` aufrufen.
-   */
-  window.NavApp = {
-    modules: {},
-    registerModule: function(id, moduleObj) {
-      this.modules[id] = moduleObj;
-      const list = document.getElementById('module-list');
-      const card = document.createElement('div');
-      card.className = 'module-card';
-      card.innerHTML = `<strong>${moduleObj.name || id}</strong><br><small style="color:var(--text-muted);">${moduleObj.description || ''}</small>`;
-      if (moduleObj.init) {
-        card.style.cursor = 'pointer';
-        card.onclick = () => moduleObj.init();
-      }
-      list.appendChild(card);
-    }
-  };
+  <!-- BOOTNAV CORE FRAMEWORK -->
+  <script>
+    (function () {
+      'use strict';
 
-  // App State (Status)
-  const state = {
-    unit: 'kn', // 'kn' (Knoten) oder 'kmh' (km/h)
-    theme: 'dark', // 'light' oder 'dark'
-    dataSave: false,
-    recording: false,
-    speedMS: 0,
-    maxSpeedMS: 0,
-    speedSamples: [],
-    lastSpeedMS: 0,
-    lastTime: 0,
-    currentTrack: [],
-    savedTracks: JSON.parse(localStorage.getItem('boot_tracks') || '[]'),
-    lat: null,
-    lon: null
-  };
-
-  // DOM Elemente
-  const btnMenu = document.getElementById('btn-menu');
-  const btnCloseMenu = document.getElementById('btn-close-menu');
-  const sidebar = document.getElementById('sidebar');
-  const sidebarOverlay = document.getElementById('sidebar-overlay');
-  const btnTheme = document.getElementById('btn-theme');
-  const btnDataSave = document.getElementById('btn-datasave');
-  const btnRec = document.getElementById('btn-rec');
-  const btnOpenLogbook = document.getElementById('btn-open-logbook');
-  const btnCloseLogbook = document.getElementById('btn-close-logbook');
-  const modalLogbook = document.getElementById('modal-logbook');
-
-  // Multi-Touch Event Listener für Tempo-Einheiten (Klick/Touch auf Tempo-Felder)
-  ['box-speed', 'box-maxspeed', 'box-avgspeed'].forEach(id => {
-    document.getElementById(id).onclick = () => {
-      state.unit = state.unit === 'kn' ? 'kmh' : 'kn';
-      document.querySelectorAll('.unit-toggle').forEach(el => el.innerText = state.unit);
-      renderUI();
-    };
-  });
-
-  // Sidebar Steuerung
-  function toggleSidebar() {
-    sidebar.classList.toggle('open');
-    sidebarOverlay.classList.toggle('active');
-  }
-  btnMenu.onclick = toggleSidebar;
-  btnCloseMenu.onclick = toggleSidebar;
-  sidebarOverlay.onclick = toggleSidebar;
-
-  // Theme Wechsel (Hell / Dunkel)
-  btnTheme.onclick = () => {
-    state.theme = state.theme === 'dark' ? 'light' : 'dark';
-    document.body.classList.toggle('dark-theme', state.theme === 'dark');
-    btnTheme.innerText = state.theme === 'dark' ? '🌙' : '☀️';
-  };
-  document.body.classList.add('dark-theme');
-
-  // Datenspar-Modus Toggle (Löscht geladene Kartenkacheln NICHT!)
-  btnDataSave.onclick = () => {
-    state.dataSave = !state.dataSave;
-    btnDataSave.classList.toggle('active', state.dataSave);
-    btnDataSave.innerText = state.dataSave ? 'Datensparen: EIN' : 'Datensparen: AUS';
-  };
-
-  // Karte initialisieren (Leaflet)
-  const map = L.map('map', { zoomControl: false }).setView([51.1657, 10.4515], 6);
-  const tileLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    maxZoom: 19,
-    attribution: '© OpenStreetMap'
-  }).addTo(map);
-
-  const userMarker = L.marker([0, 0]).addTo(map);
-  const trackPolyline = L.polyline([], { color: '#0284c7', weight: 4 }).addTo(map);
-
-  // Einheiten Umrechner
-  function convertSpeed(ms) {
-    if (state.unit === 'kn') return (ms * 1.94384).toFixed(1);
-    return (ms * 3.6).toFixed(1);
-  }
-
-  function renderUI() {
-    document.getElementById('val-speed').innerText = convertSpeed(state.speedMS);
-    document.getElementById('val-maxspeed').innerText = convertSpeed(state.maxSpeedMS);
-    
-    // Durchschnitt berechnen
-    if (state.speedSamples.length > 0) {
-      const avgMS = state.speedSamples.reduce((a, b) => a + b, 0) / state.speedSamples.length;
-      document.getElementById('val-avgspeed').innerText = convertSpeed(avgMS);
-    } else {
-      document.getElementById('val-avgspeed').innerText = '0.0';
-    }
-  }
-
-  // Öffentliche Wetter API Abfrage (Open-Meteo)
-  let lastWeatherFetch = 0;
-  async function fetchWeather(lat, lon) {
-    if (state.dataSave || Date.now() - lastWeatherFetch < 600000) return;
-    try {
-      lastWeatherFetch = Date.now();
-      const res = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true`);
-      const data = await res.json();
-      if (data && data.current_weather) {
-        const temp = data.current_weather.temperature;
-        const windKn = (data.current_weather.windspeed * 0.539957).toFixed(1);
-        document.getElementById('weather-text').innerText = `${temp}°C | Wind: ${windKn} kn`;
-      }
-    } catch (e) {
-      document.getElementById('weather-text').innerText = 'Wetter N/A';
-    }
-  }
-
-  // GPS Live Tracking (0 KB Datenverbrauch)
-  if ('geolocation' in navigator) {
-    navigator.geolocation.watchPosition(
-      (pos) => {
-        document.getElementById('gps-status').innerText = 'Aktiv';
-        document.getElementById('gps-status').style.color = 'var(--success)';
-
-        const lat = pos.coords.latitude;
-        const lon = pos.coords.longitude;
-        const speedMS = pos.coords.speed || 0;
-        const heading = pos.coords.heading;
-        const now = pos.timestamp;
-
-        state.lat = lat;
-        state.lon = lon;
-        state.speedMS = speedMS;
-
-        if (speedMS > state.maxSpeedMS) state.maxSpeedMS = speedMS;
-        if (speedMS > 0.5) state.speedSamples.push(speedMS);
-
-        // Beschleunigungs-Berechnung
-        if (state.lastTime && now > state.lastTime) {
-          const dt = (now - state.lastTime) / 1000;
-          const dv = speedMS - state.lastSpeedMS;
-          document.getElementById('val-accel').innerText = (dt > 0 ? (dv / dt) : 0).toFixed(2);
-        }
-
-        state.lastSpeedMS = speedMS;
-        state.lastTime = now;
-
-        renderUI();
-
-        if (heading !== null && !isNaN(heading)) {
-          document.getElementById('val-heading').innerText = `${Math.round(heading)}°`;
-        } else {
-          document.getElementById('val-heading').innerText = '---°';
-        }
-
-        const latLng = [lat, lon];
-        userMarker.setLatLng(latLng);
-        map.panTo(latLng);
-
-        // Aufzeichnung wenn REC aktiv
-        if (state.recording) {
-          state.currentTrack.push({ lat, lon, speed: speedMS, time: new Date().toISOString() });
-          trackPolyline.addLatLng(latLng);
-        }
-
-        fetchWeather(lat, lon);
-      },
-      (err) => {
-        document.getElementById('gps-status').innerText = 'Fehler / Keines';
-        document.getElementById('gps-status').style.color = 'var(--danger)';
-      },
-      { enableHighAccuracy: true, maximumAge: 1000, timeout: 10000 }
-    );
-  }
-
-  // REC (Aufzeichnung) Start / Stop
-  btnRec.onclick = () => {
-    state.recording = !state.recording;
-    btnRec.classList.toggle('recording', state.recording);
-    btnRec.innerText = state.recording ? '■ STOP' : '● REC';
-
-    if (!state.recording && state.currentTrack.length > 0) {
-      // Fahrt speichern
-      const trackObj = {
-        id: Date.now(),
-        date: new Date().toLocaleString(),
-        points: state.currentTrack
+      // --- INTERNAL STATE MANAGEMENT ---
+      const state = {
+        map: null,
+        boatMarker: null,
+        currentPosition: null, // { lat, lon, speed (m/s), heading, accuracy, timestamp }
+        followBoat: true,
+        speedUnit: 'knots', // 'knots' | 'kmh'
+        theme: 'dark',
+        modules: new Map(),
+        positionCallbacks: [],
+        gpsWatchId: null,
+        isSimulating: false,
+        simInterval: null
       };
-      state.savedTracks.push(trackObj);
-      localStorage.setItem('boot_tracks', JSON.stringify(state.savedTracks));
-      state.currentTrack = [];
-      alert('Fahrt erfolgreich im lokalen Speicher gesichert!');
-    }
-  };
 
-  // Fahrtenbuch Modal & Liste
-  function renderLogbook() {
-    const listEl = document.getElementById('logbook-list');
-    listEl.innerHTML = '';
-    if (state.savedTracks.length === 0) {
-      listEl.innerHTML = '<div style="text-align:center; padding:16px; color:var(--text-muted);">Keine Aufzeichnungen vorhanden</div>';
-      return;
-    }
-    state.savedTracks.forEach(tr => {
-      const item = document.createElement('div');
-      item.className = 'track-item';
-      item.innerHTML = `
-        <div>
-          <strong>${tr.date}</strong><br>
-          <small style="color:var(--text-muted);">${tr.points.length} Punkte</small>
-        </div>
-        <div style="display:flex; gap:6px;">
-          <button class="btn" onclick="exportGPX(${tr.id})">💾 GPX</button>
-          <button class="btn" style="color:var(--danger);" onclick="deleteTrack(${tr.id})">🗑️</button>
-        </div>
-      `;
-      listEl.appendChild(item);
-    });
-  }
+      // --- BOOTNAV GLOBAL API ENGINE ---
+      window.BootNav = {
+        /**
+         * Registriert ein Erweiterungs-Modul im Hauptsystem
+         * @param {Object} config { id, name, icon, description, onInit }
+         */
+        registerModule(config) {
+          if (!config || !config.id) {
+            console.error('[BootNav] Ungültige Modul-Konfiguration');
+            return;
+          }
+          if (state.modules.has(config.id)) {
+            console.warn(`[BootNav] Modul "${config.id}" ist bereits registriert.`);
+            return;
+          }
 
-  btnOpenLogbook.onclick = () => {
-    renderLogbook();
-    modalLogbook.classList.add('open');
-  };
-  btnCloseLogbook.onclick = () => modalLogbook.classList.remove('open');
+          state.modules.set(config.id, config);
+          renderSidebarModules();
 
-  // GPX Export Funktion
-  window.exportGPX = function(id) {
-    const tr = state.savedTracks.find(t => t.id === id);
-    if (!tr) return;
-    let gpx = `<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="BootNav">\n<trk><name>Fahrt ${tr.date}</name><trkseg>\n`;
-    tr.points.forEach(p => {
-      gpx += `  <trkpt lat="${p.lat}" lon="${p.lon}"><time>${p.time}</time><speed>${p.speed}</speed></trkpt>\n`;
-    });
-    gpx += `</trkseg></trk>\n</gpx>`;
+          if (typeof config.onInit === 'function') {
+            try {
+              config.onInit(window.BootNav);
+            } catch (err) {
+              console.error(`[BootNav] Fehler beim Initialisieren des Moduls ${config.id}:`, err);
+            }
+          }
+          console.log(`[BootNav] Modul erfolgreich geladen: ${config.name} (${config.id})`);
+        },
 
-    const blob = new Blob([gpx], { type: 'application/gpx+xml' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `track_${id}.gpx`;
-    a.click();
-  };
+        /** Gibt die Leaflet-Karteninstanz zurück */
+        getMap() {
+          return state.map;
+        },
 
-  window.deleteTrack = function(id) {
-    state.savedTracks = state.savedTracks.filter(t => t.id !== id);
-    localStorage.setItem('boot_tracks', JSON.stringify(state.savedTracks));
-    renderLogbook();
-  };
+        /** Registriert Callback für Position-Updates */
+        onPositionUpdate(callback) {
+          if (typeof callback === 'function') {
+            state.positionCallbacks.push(callback);
+            if (state.currentPosition) {
+              callback(state.currentPosition);
+            }
+          }
+        },
 
-  // GPX Import Handler
-  document.getElementById('btn-import-gpx').onclick = () => document.getElementById('gpx-import-input').click();
-  document.getElementById('gpx-import-input').onchange = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (evt) => {
-      const parser = new DOMParser();
-      const xmlDoc = parser.parseFromString(evt.target.result, "text/xml");
-      const pts = xmlDoc.getElementsByTagName("trkpt");
-      const importedPoints = [];
-      for (let i = 0; i < pts.length; i++) {
-        importedPoints.push({
-          lat: parseFloat(pts[i].getAttribute("lat")),
-          lon: parseFloat(pts[i].getAttribute("lon")),
-          speed: 0,
-          time: new Date().toISOString()
+        /** Fügt ein Element oder HTML-Widget zum untersten HUD hinzu */
+        addHudWidget(id, htmlContentOrElement) {
+          const container = document.getElementById('hudCustomSlot');
+          let widget = document.getElementById(`hud-widget-${id}`);
+          if (!widget) {
+            widget = document.createElement('div');
+            widget.id = `hud-widget-${id}`;
+            widget.className = 'hud-card';
+            container.appendChild(widget);
+          }
+          if (typeof htmlContentOrElement === 'string') {
+            widget.innerHTML = htmlContentOrElement;
+          } else if (htmlContentOrElement instanceof HTMLElement) {
+            widget.innerHTML = '';
+            widget.appendChild(htmlContentOrElement);
+          }
+        },
+
+        /** Fügt ein Info-Pill/Widget oben rechts auf der Karte ein */
+        addOverlayWidget(id, htmlContentOrElement) {
+          const container = document.getElementById('overlayContainer');
+          let widget = document.getElementById(`overlay-widget-${id}`);
+          if (!widget) {
+            widget = document.createElement('div');
+            widget.id = `overlay-widget-${id}`;
+            widget.className = 'map-overlay-widget';
+            container.appendChild(widget);
+          }
+          if (typeof htmlContentOrElement === 'string') {
+            widget.innerHTML = htmlContentOrElement;
+          } else if (htmlContentOrElement instanceof HTMLElement) {
+            widget.innerHTML = '';
+            widget.appendChild(htmlContentOrElement);
+          }
+        },
+
+        /** Öffnet das universelle Modal-Fenster */
+        openModal(title, contentHtml) {
+          document.getElementById('modalTitle').textContent = title;
+          document.getElementById('modalBody').innerHTML = contentHtml;
+          document.getElementById('modalBackdrop').classList.add('open');
+        },
+
+        /** Schließt das Modal-Fenster */
+        closeModal() {
+          document.getElementById('modalBackdrop').classList.remove('open');
+        },
+
+        /** Hilfsmethode: Aktuelle Position abrufen */
+        getPosition() {
+          return state.currentPosition;
+        }
+      };
+
+      // --- INITIALISIERUNG DES MAP- & NAVIGATIONSSYSTEMS ---
+      function initApp() {
+        initTheme();
+        initMap();
+        initGeolocation();
+        setupEventListeners();
+        loadDemoModules(); // Lädt Beispiel-Module zur Veranschaulichung der Plugin-Schnittstelle
+      }
+
+      // --- MAP INITIALISIERUNG ---
+      function initMap() {
+        // Standard-Startkoordinaten (z. B. Ostsee / Kieler Förde oder Rab/Kroatien)
+        const initialLat = 54.3233;
+        const initialLon = 10.1500;
+
+        state.map = L.map('map', {
+          zoomControl: false,
+          attributionControl: false
+        }).setView([initialLat, initialLon], 14);
+
+        // Standard OpenStreetMap Tile Layer
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          maxZoom: 19
+        }).addTo(state.map);
+
+        // Eigene Zoom-Control unten links platzieren
+        L.control.zoom({ position: 'bottomleft' }).addTo(state.map);
+
+        // Erstelle Custom SVG Boot-Marker
+        const boatIcon = L.divIcon({
+          className: 'custom-boat-marker',
+          html: `
+            <div class="boat-marker-container" id="boatMarkerSvg">
+              <svg class="boat-svg" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="50" cy="50" r="42" fill="rgba(6, 182, 212, 0.2)" stroke="#06b6d4" stroke-width="3" />
+                <path d="M50 12 L72 78 L50 64 L28 78 Z" fill="#0284c7" stroke="#ffffff" stroke-width="4" stroke-linejoin="round"/>
+              </svg>
+            </div>
+          `,
+          iconSize: [40, 40],
+          iconAnchor: [20, 20]
+        });
+
+        state.boatMarker = L.marker([initialLat, initialLon], { icon: boatIcon }).addTo(state.map);
+
+        // Event-Listener: Deaktiviere Follow-Modus bei manuellem Verschieben der Karte
+        state.map.on('dragstart', () => {
+          setFollowMode(false);
         });
       }
-      if (importedPoints.length > 0) {
-        state.savedTracks.push({
-          id: Date.now(),
-          date: `Importiert: ${file.name}`,
-          points: importedPoints
-        });
-        localStorage.setItem('boot_tracks', JSON.stringify(state.savedTracks));
-        renderLogbook();
-        alert('GPX-Datei erfolgreich importiert!');
-      }
-    };
-    reader.readAsText(file);
-  };
-</script>
 
+      // --- GEOLOCATION LOGIK ---
+      function initGeolocation() {
+        const gpsDot = document.getElementById('gpsDot');
+        const gpsText = document.getElementById('gpsStatusText');
+
+        if (!('geolocation' in navigator)) {
+          gpsDot.className = 'gps-dot error';
+          gpsText.textContent = 'GPS k.A.';
+          return;
+        }
+
+        state.gpsWatchId = navigator.geolocation.watchPosition(
+          (pos) => {
+            if (state.isSimulating) return;
+
+            gpsDot.className = 'gps-dot active';
+            gpsText.textContent = 'GPS Aktiv';
+
+            const posData = {
+              lat: pos.coords.latitude,
+              lon: pos.coords.longitude,
+              speed: pos.coords.speed || 0, // m/s
+              heading: pos.coords.heading || 0, // Grad
+              accuracy: Math.round(pos.coords.accuracy || 0),
+              timestamp: pos.timestamp
+            };
+
+            updatePosition(posData);
+          },
+          (err) => {
+            if (state.isSimulating) return;
+            console.warn('[GPS] Geolocation-Fehler:', err.message);
+            gpsDot.className = 'gps-dot error';
+            gpsText.textContent = 'GPS Suche...';
+          },
+          {
+            enableHighAccuracy: true,
+            maximumAge: 1000,
+            timeout: 10000
+          }
+        );
+      }
+
+      // --- POSITIONS-DATEN VERARBEITUNG & VERTEILUNG ---
+      function updatePosition(posData) {
+        state.currentPosition = posData;
+
+        // 1. UI Dashboard aktualisieren
+        const speedValue = convertSpeed(posData.speed, state.speedUnit);
+        document.getElementById('hudSpeed').textContent = speedValue.toFixed(1);
+        document.getElementById('hudHeading').textContent = posData.heading ? Math.round(posData.heading) : '---';
+        document.getElementById('hudAccuracy').textContent = posData.accuracy || '--';
+
+        // 2. Boot-Marker auf Karte aktualisieren
+        const newLatLng = [posData.lat, posData.lon];
+        state.boatMarker.setLatLng(newLatLng);
+
+        // Boot-Rotation anhand des Kurses (COG)
+        const svgContainer = document.getElementById('boatMarkerSvg');
+        if (svgContainer && posData.heading !== null) {
+          svgContainer.style.transform = `rotate(${posData.heading}deg)`;
+        }
+
+        // Karten-Zentrierung falls Follow-Modus aktiv
+        if (state.followBoat) {
+          state.map.panTo(newLatLng, { animate: true, duration: 0.5 });
+        }
+
+        // 3. Modul-Callbacks benachrichtigen
+        state.positionCallbacks.forEach(cb => {
+          try {
+            cb(posData);
+          } catch (e) {
+            console.error('[BootNav] Fehler in Modul-Position-Callback:', e);
+          }
+        });
+      }
+
+      // --- HELPER CONVERSIONS ---
+      function convertSpeed(mPerSec, unit) {
+        if (!mPerSec || mPerSec < 0) return 0;
+        if (unit === 'knots') {
+          return mPerSec * 1.94384;
+        } else if (unit === 'kmh') {
+          return mPerSec * 3.6;
+        }
+        return mPerSec;
+      }
+
+      function setFollowMode(enable) {
+        state.followBoat = enable;
+        const btn = document.getElementById('btnFollowBoat');
+        if (enable) {
+          btn.classList.add('active');
+          if (state.currentPosition) {
+            state.map.panTo([state.currentPosition.lat, state.currentPosition.lon]);
+          }
+        } else {
+          btn.classList.remove('active');
+        }
+      }
+
+      // --- EVENT HANDLERS & UI TOGGLES ---
+      function setupEventListeners() {
+        // Sidebar Toggle
+        const sidebar = document.getElementById('sidebar');
+        const backdrop = document.getElementById('sidebarBackdrop');
+        const toggleSidebar = () => {
+          sidebar.classList.toggle('open');
+          backdrop.classList.toggle('open');
+        };
+        document.getElementById('btnToggleSidebar').addEventListener('click', toggleSidebar);
+        document.getElementById('btnCloseSidebar').addEventListener('click', toggleSidebar);
+        backdrop.addEventListener('click', toggleSidebar);
+
+        // Theme Toggle
+        document.getElementById('btnThemeToggle').addEventListener('click', () => {
+          state.theme = state.theme === 'dark' ? 'light' : 'dark';
+          document.documentElement.setAttribute('data-theme', state.theme);
+          document.getElementById('btnThemeToggle').textContent = state.theme === 'dark' ? '🌙' : '☀️';
+        });
+
+        // Speed Unit Toggle
+        document.getElementById('btnToggleUnit').addEventListener('click', () => {
+          state.speedUnit = state.speedUnit === 'knots' ? 'kmh' : 'knots';
+          document.getElementById('btnToggleUnit').textContent = state.speedUnit === 'knots' ? 'kn' : 'km/h';
+          document.getElementById('hudSpeedUnit').textContent = state.speedUnit === 'knots' ? 'kn' : 'km/h';
+          if (state.currentPosition) updatePosition(state.currentPosition);
+        });
+
+        // Follow Boat Button
+        document.getElementById('btnFollowBoat').addEventListener('click', () => {
+          setFollowMode(true);
+        });
+
+        // GPS Simulation Modus (Nützlich für Desktop-Tests)
+        document.getElementById('btnSimulateGps').addEventListener('click', toggleGpsSimulation);
+
+        // Modal Close
+        document.getElementById('btnCloseModal').addEventListener('click', window.BootNav.closeModal);
+        document.getElementById('btnConfirmModal').addEventListener('click', window.BootNav.closeModal);
+
+        // System Info Modal Button
+        document.getElementById('btnSystemInfo').addEventListener('click', () => {
+          const infoHtml = `
+            <p><strong>System:</strong> BootNav Modular Core v1.0</p>
+            <p><strong>Registered Modules:</strong> ${state.modules.size}</p>
+            <p><strong>Screen:</strong> ${window.innerWidth}x${window.innerHeight}px</p>
+            <p><strong>GPS Mode:</strong> ${state.isSimulating ? 'Simulation' : 'Live Geolocation'}</p>
+            <hr style="margin: 12px 0; border: 0; border-top: 1px solid var(--border-color);"/>
+            <p style="font-size: 0.85rem; color: var(--text-secondary);">Framework entwickelt für eigenständigen Einsatz & PWA/GitHub Pages Hosting.</p>
+          `;
+          window.BootNav.openModal('System-Status', infoHtml);
+        });
+      }
+
+      function initTheme() {
+        document.documentElement.setAttribute('data-theme', state.theme);
+      }
+
+      function renderSidebarModules() {
+        const container = document.getElementById('moduleList');
+        container.innerHTML = '';
+
+        state.modules.forEach((mod) => {
+          const card = document.createElement('div');
+          card.className = 'module-card';
+          card.innerHTML = `
+            <div class="module-icon">${mod.icon || '📦'}</div>
+            <div class="module-info">
+              <div class="module-name">${mod.name}</div>
+              <div class="module-desc">${mod.description || ''}</div>
+            </div>
+          `;
+          card.addEventListener('click', () => {
+            if (typeof mod.onClick === 'function') {
+              mod.onClick();
+            } else {
+              window.BootNav.openModal(mod.name, `<p>${mod.description}</p>`);
+            }
+          });
+          container.appendChild(card);
+        });
+      }
+
+      // --- SIMULATION LOGIK FÜR TESTS ---
+      function toggleGpsSimulation() {
+        const btn = document.getElementById('btnSimulateGps');
+        state.isSimulating = !state.isSimulating;
+
+        if (state.isSimulating) {
+          btn.classList.add('active');
+          document.getElementById('gpsDot').className = 'gps-dot active';
+          document.getElementById('gpsStatusText').textContent = 'Demo Fahrt';
+
+          let simLat = state.currentPosition ? state.currentPosition.lat : 54.3233;
+          let simLon = state.currentPosition ? state.currentPosition.lon : 10.1500;
+          let angle = 45; // Fahrtrichtung Südost
+
+          state.simInterval = setInterval(() => {
+            angle = (angle + 1) % 360;
+            // Etwa 6 Knoten Fahrtgeschwindigkeit simulieren
+            simLat += Math.cos(angle * Math.PI / 180) * 0.0001;
+            simLon += Math.sin(angle * Math.PI / 180) * 0.0001;
+
+            updatePosition({
+              lat: simLat,
+              lon: simLon,
+              speed: 3.09, // ~6 Knoten in m/s
+              heading: angle,
+              accuracy: 3,
+              timestamp: Date.now()
+            });
+          }, 1000);
+        } else {
+          btn.classList.remove('active');
+          clearInterval(state.simInterval);
+          document.getElementById('gpsStatusText').textContent = 'GPS Suchen...';
+        }
+      }
+
+      // --- DEMO EXTENSION MODULES (Demonstriert die Plugin API) ---
+      function loadDemoModules() {
+        // Demo 1: Wetter & Wind Modul
+        window.BootNav.registerModule({
+          id: 'weather_demo',
+          name: 'Wetter & Wind',
+          icon: '🌤️',
+          description: 'Echtzeit Wind- & Barometerdaten',
+          onInit(app) {
+            // Füge Overlay-Widget oben rechts auf der Karte ein
+            app.addOverlayWidget('wind_pill', '💨 <b>12 kn</b> SW (4 Bft)');
+
+            // Reagiere auf Positions-Updates
+            app.onPositionUpdate((pos) => {
+              // Beispiels-Update
+            });
+          },
+          onClick() {
+            window.BootNav.openModal('Wetter & Seewetterbericht', `
+              <h3>Aktuelle Seewetter-Prognose</h3>
+              <p style="margin-top:8px;">Wind: 12-15 Knoten aus Süd-West, Seezaun leicht bewegt.</p>
+              <p>Luftdruck: 1018 hPa (stabil)</p>
+              <p>Sicht: Gut (>10 nm)</p>
+            `);
+          }
+        });
+
+        // Demo 2: Seemannschaft & Knoten
+        window.BootNav.registerModule({
+          id: 'knots_guide',
+          name: 'Knotenkunde',
+          icon: '🪢',
+          description: 'Anleitungen für die wichtigsten Schiffsknoten',
+          onInit(app) {
+            // Optionales HUD Widget
+          },
+          onClick() {
+            window.BootNav.openModal('Knotenkunde & Vorbereitung', `
+              <h4>Die wichtigsten 3 Knoten an Bord:</h4>
+              <ul style="margin-left: 20px; margin-top: 10px; line-height: 1.8;">
+                <li><b>Palstek:</b> Das Ausreißfeste Auge für Festmacher.</li>
+                <li><b>Webleinenstek:</b> Zum Befestigen der Fender am Seezaun.</li>
+                <li><b>Achterknoten:</b> Verhindert das Ausrauschen von Schoten.</li>
+              </ul>
+            `);
+          }
+        });
+
+        // Demo 3: Logbuch & Trip-Meter
+        window.BootNav.registerModule({
+          id: 'trip_logger',
+          name: 'Trip Logbuch',
+          icon: '📖',
+          description: 'Streckenzähler & Automatische Distanzmessung',
+          onInit(app) {
+            let totalDist = 4.2; // NM
+            // Füge Custom HUD Widget hinzu
+            app.addHudWidget('trip_distance', `
+              <div class="hud-label">Trip Dist.</div>
+              <div class="hud-value-group">
+                <div class="hud-value">${totalDist.toFixed(1)}</div>
+                <div class="hud-unit">nm</div>
+              </div>
+            `);
+          },
+          onClick() {
+            window.BootNav.openModal('Trip Logbuch Details', `
+              <p><b>Aktueller Schlag:</b> 4.2 sm</p>
+              <p><b>Max. Speed:</b> 8.4 kn</p>
+              <p><b>Fahrzeit:</b> 00:45 h</p>
+            `);
+          }
+        });
+      }
+
+      // App starten sobald DOM geladen ist
+      document.addEventListener('DOMContentLoaded', initApp);
+
+    })();
+  </script>
 </body>
 </html>
-
