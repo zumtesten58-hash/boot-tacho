@@ -147,29 +147,19 @@ button{font-family:inherit;}
 /* ---------- Main / Map ---------- */
 #bn-main{position:relative; flex:1; min-height:0; overflow:hidden;}
 
+/* Die Rotator-Hülle ist bewusst größer als der Viewport (Diagonale), damit beim
+   Drehen keine Lücken an den Bildschirm-Ecken entstehen — wie bei Google Maps
+   dreht sich immer eine überdimensionierte Fläche, sichtbar bleibt nur der
+   von #bn-main geclippte Ausschnitt in der Mitte. */
 #bn-map-rotator{
   position:absolute; top:50%; left:50%;
-  width:100vmax; height:100vmax;
+  width:100vmax; height:100vmax; /* per JS bei Bedarf auf echte Diagonale vergrößert */
   transform:translate(-50%,-50%);
   transform-origin:50% 50%;
   will-change:transform;
-  -webkit-backface-visibility: hidden;
-  backface-visibility: hidden;
-  -webkit-transform-style: preserve-3d;
-  transform-style: preserve-3d;
 }
 #bn-map{position:absolute; inset:0; background:var(--bn-deep-900);}
-#bn-map-rotator, #bn-map{ touch-action:none; }
-
-/* GPU-Fix für Kartenkacheln gegen Flackern und Schwarzwerden */
-.leaflet-tile-container {
-  will-change: transform;
-}
-.leaflet-tile {
-  -webkit-backface-visibility: hidden !important;
-  backface-visibility: hidden !important;
-  visibility: visible !important;
-}
+#bn-map-rotator, #bn-map{ touch-action:none; } /* eigenes Gesten-Handling, kein Browser-Scroll/Zoom */
 
 #bn-attribution{
   position:absolute; left:6px; bottom:6px; z-index:410;
@@ -178,9 +168,10 @@ button{font-family:inherit;}
   padding:2px 7px; border-radius:6px; pointer-events:none;
   border:1px solid var(--bn-line);
 }
+#bn-map{position:absolute; inset:0; background:var(--bn-deep-900);}
 
-.leaflet-control-attribution{ display:none !important; }
-.leaflet-control-zoom{display:none;}
+.leaflet-control-attribution{ display:none !important; } /* eigenes, unrotiertes #bn-attribution wird stattdessen genutzt */
+.leaflet-control-zoom{display:none;} /* eigene Zoom-Controls */
 
 .bn-boat-marker{
   display:flex; align-items:center; justify-content:center;
@@ -211,7 +202,7 @@ button{font-family:inherit;}
 .bn-map-btn.bn-active{color:var(--bn-accent); border-color:var(--bn-accent);}
 #bn-compass-btn svg{width:20px; height:20px; transition:transform .1s linear;}
 
-/* ---------- Overlay-Container (oben rechts) ---------- */
+/* ---------- Overlay-Container (oben rechts, für Module) ---------- */
 #bn-overlay-container{
   position:absolute; top:calc(10px + var(--bn-safe-top)); right:calc(10px + var(--bn-safe-right));
   display:flex; flex-direction:column; gap:6px; align-items:flex-end;
@@ -236,7 +227,7 @@ button{font-family:inherit;}
 }
 .bn-offline-banner.bn-show{display:flex;}
 
-/* ---------- Sidebar ---------- */
+/* ---------- Sidebar (Burger-Menü) ---------- */
 #bn-sidebar-scrim{
   position:fixed; inset:0; background:rgba(0,0,0,0.5);
   opacity:0; pointer-events:none; transition:opacity .25s ease; z-index:600;
@@ -417,11 +408,13 @@ button{font-family:inherit;}
 .bn-toast.bn-error{border-color:var(--bn-danger); color:#ffd4d4;}
 .bn-toast.bn-success{border-color:var(--bn-accent); color:#bdf5e8;}
 
+/* ---------- Scrollbars (dezent) ---------- */
 .bn-sidebar-section::-webkit-scrollbar, .bn-modal-body::-webkit-scrollbar{width:5px;}
 .bn-sidebar-section::-webkit-scrollbar-thumb, .bn-modal-body::-webkit-scrollbar-thumb{
   background:var(--bn-line-strong); border-radius:3px;
 }
 
+/* ---------- Landscape-Anpassungen ---------- */
 @media (orientation:landscape) and (max-height:480px){
   :root{--bn-header-h:44px; --bn-hud-h:60px;}
   .bn-hud-value{font-size:16px;}
@@ -430,10 +423,12 @@ button{font-family:inherit;}
   #bn-map-controls{bottom:calc(10px + var(--bn-hud-h) + var(--bn-safe-bottom));}
 }
 
+/* ---------- Reduced Motion ---------- */
 @media (prefers-reduced-motion: reduce){
   *{animation-duration:0.01ms !important; transition-duration:0.01ms !important;}
 }
 
+/* ---------- Fokus-Sichtbarkeit (a11y) ---------- */
 button:focus-visible, .bn-map-btn:focus-visible, .bn-icon-btn:focus-visible{
   outline:2px solid var(--bn-accent); outline-offset:2px;
 }
@@ -473,7 +468,7 @@ button:focus-visible, .bn-map-btn:focus-visible, .bn-icon-btn:focus-visible{
 
     <div class="bn-offline-banner" id="bn-offline-banner">📡 Offline — letzte bekannte Kartenkacheln</div>
 
-    <div id="bn-overlay-container"></div>
+    <div id="bn-overlay-container"><!-- Module hängen hier Info-Pills ein --></div>
 
     <div id="bn-map-controls">
       <button class="bn-map-btn" id="bn-locate-btn" aria-label="Auf Position zentrieren" title="Zentrieren">🎯</button>
@@ -505,7 +500,7 @@ button:focus-visible, .bn-map-btn:focus-visible, .bn-icon-btn:focus-visible{
       <span class="bn-hud-label">Position</span>
       <span class="bn-hud-value" style="font-size:13px;" id="bn-val-pos">--.-----, --.-----</span>
     </div>
-    <div id="bn-hud-ext"></div>
+    <div id="bn-hud-ext"><!-- Module hängen hier eigene HUD-Widgets ein --></div>
   </footer>
 
 </div>
@@ -574,19 +569,24 @@ button:focus-visible, .bn-map-btn:focus-visible, .bn-icon-btn:focus-visible{
 (function(){
 "use strict";
 
-const NM_PER_MS_TO_KNOTS = 1.9438444924;
+/* ======================================================================
+   BOOTNAV CORE
+   Stellt window.BootNav als globale Modul-API bereit.
+   ====================================================================== */
+
+const NM_PER_MS_TO_KNOTS = 1.9438444924; // m/s -> knots
 const KMH_PER_MS = 3.6;
 
 const state = {
   theme: 'dark',
-  speedUnit: 'kn',
-  modules: new Map(),
+  speedUnit: 'kn', // 'kn' | 'kmh'
+  modules: new Map(), // id -> config
   positionListeners: [],
   lastPosition: null,
   watchId: null,
   mapRotation: 0,
   headingLock: false,
-  gpsStatus: 'none'
+  gpsStatus: 'none' // none | searching | live | error
 };
 
 /* ---------------- DOM refs ---------------- */
@@ -685,7 +685,7 @@ el.hudSpeedCell.addEventListener('click', () => applySpeedUnit(state.speedUnit =
   applySpeedUnit(saved === 'kmh' ? 'kmh' : 'kn');
 })();
 
-/* ---------------- Wake Lock ---------------- */
+/* ---------------- Bildschirm wach halten (Wake Lock) ---------------- */
 let wakeLockSentinel = null;
 let wakeLockWanted = false;
 
@@ -696,6 +696,7 @@ async function acquireWakeLock(){
     wakeLockSentinel.addEventListener('release', () => { wakeLockSentinel = null; });
     return true;
   } catch (err) {
+    console.warn('BootNav: Wake Lock konnte nicht aktiviert werden', err);
     return false;
   }
 }
@@ -708,7 +709,7 @@ function applyWakeLockSetting(on){
   try { localStorage.setItem('bn-wakelock', on ? '1' : '0'); } catch(e){}
   if (on){
     if (!('wakeLock' in navigator)) {
-      showToast('Dieses Gerät unterstützt kein Wach-Halten des Bildschirms', 'warn');
+      showToast('Dieses Gerät/Browser unterstützt kein Wach-Halten des Bildschirms', 'warn');
       return;
     }
     acquireWakeLock().then(ok => { if (ok) showToast('Bildschirm bleibt an', 'success'); });
@@ -721,6 +722,8 @@ el.wakelockToggle.addEventListener('click', (e) => {
   const btn = e.target.closest('button[data-wakelock]');
   if (btn) applyWakeLockSetting(btn.dataset.wakelock === 'on');
 });
+// Wake Lock wird vom System freigegeben, sobald der Tab in den Hintergrund geht —
+// beim Zurückkehren automatisch neu anfordern, falls gewünscht.
 document.addEventListener('visibilitychange', () => {
   if (wakeLockWanted && document.visibilityState === 'visible' && !wakeLockSentinel) {
     acquireWakeLock();
@@ -733,25 +736,19 @@ document.addEventListener('visibilitychange', () => {
 })();
 
 /* ---------------- Leaflet Karte ---------------- */
-/* WICHTIG: fadeAnimation und zoomAnimation deaktivieren gegen Schwarzwerden! */
 const map = L.map('bn-map', {
   zoomControl: false,
-  attributionControl: false,
+  attributionControl: false, // eigenes, unrotiertes Label (#bn-attribution) wird genutzt
   worldCopyJump: true,
-  dragging: false,
+  dragging: false,   // wir übernehmen Pan/Zoom/Rotation komplett selbst (siehe Gesten-Handling)
   touchZoom: false,
-  scrollWheelZoom: false,
-  doubleClickZoom: false,
-  boxZoom: false,
   tap: false,
-  fadeAnimation: false,
-  zoomAnimation: false,
-  zoomSnap: 0,
-  zoomDelta: 1,
+  zoomSnap: 0,        // Fix: kein Runden auf ganze Zoomstufen -> Pinch-Zoom reagiert stufenlos
+  zoomDelta: 1,        // Schrittweite für +/- Buttons bleibt 1 volle Stufe
   wheelPxPerZoomLevel: 120,
   maxZoom: 19,
   minZoom: 3
-}).setView([54.3233, 10.1228], 12);
+}).setView([54.3233, 10.1228], 12); // Startpunkt: Kieler Förde als sinnvoller maritimer Default
 
 const TILE_LAYERS = {
   street: L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -778,6 +775,7 @@ function setTileLayer(id){
 }
 el.layerBtn.addEventListener('click', () => setTileLayer(activeLayerId === 'street' ? 'satellite' : 'street'));
 
+// Boot-Icon (SVG, dreht sich mit Kurs)
 function boatIconHtml(){
   return `<div class="bn-boat-marker"><svg viewBox="0 0 34 34" xmlns="http://www.w3.org/2000/svg">
     <circle cx="17" cy="17" r="15" fill="rgba(32,201,168,0.16)"/>
@@ -813,22 +811,29 @@ function updateAccuracyCircle(latlng, accuracyMeters){
   }
 }
 
-/* ---------------- Rotator-Hülle ---------------- */
+/* ---------------- Rotator-Hülle: immer bildschirmfüllend ---------------- */
+// Damit beim Drehen keine leeren Ecken sichtbar werden, ist die Hülle mindestens
+// so groß wie die Bildschirmdiagonale und wird bei jeder Größenänderung neu berechnet.
+// Zusätzliche Marge, da während einer Pinch-Geste kurzzeitig eine CSS-Vorschau-
+// Skalierung < 1 (Rauszoomen) angewendet wird — ohne Marge würde das die Hülle
+// unter die Deckungsgröße schrumpfen und schwarze Ränder freilegen.
+const PINCH_SCALE_MIN = 0.85;
+const PINCH_SCALE_MAX = 1.25;
 const rotatorEl = document.getElementById('bn-map-rotator');
 let rotatorSize = 0;
 function resizeRotator(){
   const rect = el.bnMain.getBoundingClientRect();
   const diag = Math.ceil(Math.sqrt(rect.width * rect.width + rect.height * rect.height)) + 40;
-  rotatorSize = diag;
-  rotatorEl.style.width = diag + 'px';
-  rotatorEl.style.height = diag + 'px';
+  rotatorSize = Math.ceil(diag / PINCH_SCALE_MIN); // deckt auch bei kleinster Vorschau-Skalierung
+  rotatorEl.style.width = rotatorSize + 'px';
+  rotatorEl.style.height = rotatorSize + 'px';
   map.invalidateSize();
 }
 resizeRotator();
 
 /* ---------------- Map-Controls ---------------- */
-el.zoomInBtn.addEventListener('click', () => map.setZoom(map.getZoom() + 1, { animate: false }));
-el.zoomOutBtn.addEventListener('click', () => map.setZoom(map.getZoom() - 1, { animate: false }));
+el.zoomInBtn.addEventListener('click', () => map.setZoom(map.getZoom() + 1, { animate: true }));
+el.zoomOutBtn.addEventListener('click', () => map.setZoom(map.getZoom() - 1, { animate: true }));
 
 let followMode = true;
 el.locateBtn.addEventListener('click', () => {
@@ -844,9 +849,23 @@ el.compassBtn.addEventListener('click', () => {
   if (!state.headingLock) rotateMap(0);
 });
 function normalizeDeg(d){ d = d % 360; return d < 0 ? d + 360 : d; }
+let livePinchScale = 1; // CSS-Vorschau-Skalierung während einer laufenden Pinch-Geste
+let transformFrameQueued = false;
+// Bündelt Transform-Schreibvorgänge auf höchstens einen pro Bildschirm-Frame,
+// statt bei jedem einzelnen Touch-Move-Event sofort das DOM zu ändern -> ruckelt weniger.
+function scheduleTransformUpdate(){
+  if (transformFrameQueued) return;
+  transformFrameQueued = true;
+  requestAnimationFrame(() => {
+    transformFrameQueued = false;
+    rotatorEl.style.transform = `translate(-50%,-50%) rotate(${-state.mapRotation}deg) scale(${livePinchScale})`;
+  });
+}
+function updateRotatorTransform(){ scheduleTransformUpdate(); }
 function rotateMap(deg){
   state.mapRotation = normalizeDeg(deg);
-  rotatorEl.style.transform = `translate(-50%,-50%) rotate(${-state.mapRotation}deg)`;
+  updateRotatorTransform();
+  // Boot-Icon gegen die Kartenrotation ausgleichen, damit es aufrecht bleibt
   if (boatMarker){
     const iconEl = boatMarker.getElement();
     const svg = iconEl && iconEl.querySelector('svg');
@@ -855,24 +874,35 @@ function rotateMap(deg){
 }
 
 /* ======================================================================
-   EIGENES GESTEN-HANDLING (Mit Frame-Drosselung gegen Flackern)
+   EIGENES GESTEN-HANDLING (ersetzt natives Leaflet Dragging/TouchZoom)
+   — 1 Finger: Verschieben (rotationskorrigiert)
+   — 2 Finger: Pinch-Zoom + Dreh-Geste gleichzeitig, wie in Maps-Apps üblich
+   Fix Schwarzbild/Ruckeln: der eigentliche Leaflet-Zoom (der Kacheln neu lädt)
+   wird während der Geste NICHT bei jedem Fingertick aufgerufen, sondern nur
+   "committet", sobald die CSS-Vorschau-Skalierung eine feste Ober-/Untergrenze
+   erreicht (PINCH_SCALE_MIN/MAX) oder die Geste endet — dazwischen läuft nur
+   eine günstige, pro Frame gebündelte CSS-Skalierung.
    ====================================================================== */
-const gestureEl = document.getElementById('bn-map');
-const activePointers = new Map();
-let panLast = null;
-let pinch = null;
-let isTransformScheduled = false;
+const gestureEl = document.getElementById('bn-map'); // nur die Kartenfläche selbst, nicht Buttons/Overlay
+const activePointers = new Map(); // pointerId -> {x,y}
+let panLast = null;               // letzte Position für 1-Finger-Pan
+let pinch = null;                 // { lastDist, lastAngle, lastMid, startDist, startZoom }
 
 function angleDeg(a, b){ return Math.atan2(b.y - a.y, b.x - a.x) * 180 / Math.PI; }
 function dist(a, b){ return Math.hypot(b.x - a.x, b.y - a.y); }
 function midpoint(a, b){ return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }; }
+function clamp(v, lo, hi){ return Math.max(lo, Math.min(hi, v)); }
 
+// Wandelt einen Bewegungsvektor in Bildschirmkoordinaten in den entsprechenden
+// Vektor im (unrotierten) internen Koordinatensystem der Karte um.
 function screenDeltaToMapDelta(dx, dy){
   const rad = state.mapRotation * Math.PI / 180;
   const cos = Math.cos(rad), sin = Math.sin(rad);
   return { x: dx * cos - dy * sin, y: dx * sin + dy * cos };
 }
-
+// Wandelt einen Bildschirmpunkt in den lokalen (unrotierten) Container-Punkt der
+// Leaflet-Karte um — nötig, damit Pinch-Zoom exakt zwischen den Fingern verankert.
+// Referenzpunkt ist stets das unrotierte #bn-main (= Rotationszentrum).
 function screenPointToContainerPoint(pt){
   const rect = el.bnMain.getBoundingClientRect();
   const cx = rect.left + rect.width / 2, cy = rect.top + rect.height / 2;
@@ -890,7 +920,37 @@ function startPan(){
 }
 function updatePinchBaseline(){
   const pts = [...activePointers.values()];
-  pinch = { lastDist: dist(pts[0], pts[1]), lastAngle: angleDeg(pts[0], pts[1]), lastMid: midpoint(pts[0], pts[1]) };
+  const d0 = dist(pts[0], pts[1]);
+  pinch = {
+    lastDist: d0, lastAngle: angleDeg(pts[0], pts[1]), lastMid: midpoint(pts[0], pts[1]),
+    startDist: d0, startZoom: map.getZoom()
+  };
+  livePinchScale = 1;
+}
+// Wendet den bisher per CSS vorgeschauten Zoom EINMALIG echt auf die Leaflet-Karte
+// an (statt bei jedem Frame) und setzt die Vorschau-Skalierung zurück.
+function commitPinchZoom(){
+  if (!pinch) return;
+  if (livePinchScale !== 1){
+    const finalZoom = pinch.startZoom + Math.log2(livePinchScale);
+    const anchor = screenPointToContainerPoint(pinch.lastMid);
+    map.setZoomAround(anchor, finalZoom, { animate: false });
+  }
+  livePinchScale = 1;
+  updateRotatorTransform();
+}
+// Wie commitPinchZoom, setzt die Geste danach aber sofort mit neuer Basis fort
+// (kein Abbruch) — wird genutzt, wenn die Vorschau-Skalierung ihre Grenze erreicht,
+// damit lange Pinch-Gesten nie zu extreme CSS-Werte annehmen und zwischendurch
+// bereits echte Kacheln nachladen können.
+function rebasePinchZoom(){
+  if (!pinch) return;
+  const finalZoom = pinch.startZoom + Math.log2(livePinchScale);
+  const anchor = screenPointToContainerPoint(pinch.lastMid);
+  map.setZoomAround(anchor, finalZoom, { animate: false });
+  pinch.startZoom = map.getZoom();
+  pinch.startDist = pinch.lastDist;
+  livePinchScale = 1;
 }
 
 gestureEl.addEventListener('pointerdown', (e) => {
@@ -900,6 +960,7 @@ gestureEl.addEventListener('pointerdown', (e) => {
   followMode = false;
   el.locateBtn.classList.remove('bn-active');
   if (activePointers.size === 1){
+    commitPinchZoom();
     pinch = null;
     startPan();
   } else if (activePointers.size === 2){
@@ -912,53 +973,51 @@ gestureEl.addEventListener('pointermove', (e) => {
   if (!activePointers.has(e.pointerId)) return;
   activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
 
-  if (!isTransformScheduled) {
-    isTransformScheduled = true;
-    requestAnimationFrame(processGestures);
-  }
-});
-
-function processGestures() {
-  isTransformScheduled = false;
-
   if (activePointers.size === 1 && panLast){
     const p = [...activePointers.values()][0];
-    if (!p) return;
     const dxScreen = p.x - panLast.x, dyScreen = p.y - panLast.y;
     panLast = { x: p.x, y: p.y };
     const d = screenDeltaToMapDelta(dxScreen, dyScreen);
+    // Inhalt soll dem Finger folgen (Papier-Metapher); panBy nutzt die
+    // entgegengesetzte, kameraseitige Konvention -> negieren.
     map.panBy([-d.x, -d.y], { animate: false, duration: 0, noMoveStart: true });
 
   } else if (activePointers.size === 2 && pinch){
     const pts = [...activePointers.values()];
-    if (pts.length < 2) return;
     const currentDist = dist(pts[0], pts[1]);
     const currentAngle = angleDeg(pts[0], pts[1]);
     const currentMid = midpoint(pts[0], pts[1]);
 
+    // 1) Verschieben entlang der Mittelpunkt-Bewegung (rotationskorrigiert)
     const dxScreen = currentMid.x - pinch.lastMid.x, dyScreen = currentMid.y - pinch.lastMid.y;
     const d = screenDeltaToMapDelta(dxScreen, dyScreen);
     map.panBy([-d.x, -d.y], { animate: false, duration: 0, noMoveStart: true });
 
+    // 2) Drehen entsprechend der Fingerverdrehung (nur CSS, kein Kachel-Neuladen)
     const angleDelta = currentAngle - pinch.lastAngle;
-    rotateMap(state.mapRotation - angleDelta);
+    state.mapRotation = normalizeDeg(state.mapRotation - angleDelta);
 
-    if (isFinite(currentDist) && currentDist > 0 && pinch.lastDist > 0){
-      const rawZoom = map.getZoom() + Math.log2(currentDist / pinch.lastDist);
-      const newZoom = Math.min(Math.max(rawZoom, map.getMinZoom()), map.getMaxZoom());
-      const anchor = screenPointToContainerPoint(currentMid);
-      if (isFinite(anchor.x) && isFinite(anchor.y) && isFinite(newZoom)) {
-        map.setZoomAround(anchor, newZoom, { animate: false });
-      }
+    // 3) Zoom-Vorschau nur per CSS-Skalierung (kein Leaflet-Zoom, kein Kachel-Neuladen
+    //    während der Geste — das verhindert den Schwarzbild-Effekt)
+    pinch.lastDist = currentDist; pinch.lastAngle = currentAngle; pinch.lastMid = currentMid;
+    if (isFinite(currentDist) && currentDist > 0 && pinch.startDist > 0){
+      livePinchScale = clamp(currentDist / pinch.startDist, PINCH_SCALE_MIN, PINCH_SCALE_MAX);
     }
+    updateRotatorTransform();
 
-    pinch = { lastDist: currentDist, lastAngle: currentAngle, lastMid: currentMid };
+    // Grenze erreicht (sehr schnelles/langes Pinchen) -> zwischendurch echt anwenden,
+    // damit die Skalierung nie extrem wird und neue Kacheln rechtzeitig laden.
+    if (livePinchScale <= PINCH_SCALE_MIN || livePinchScale >= PINCH_SCALE_MAX){
+      rebasePinchZoom();
+    }
   }
-}
+});
 
 function endPointer(e){
+  const wasPinching = activePointers.size === 2;
   activePointers.delete(e.pointerId);
   try { gestureEl.releasePointerCapture(e.pointerId); } catch(err){}
+  if (wasPinching) commitPinchZoom(); // echten Zoom jetzt einmalig anwenden
   if (activePointers.size === 1){
     pinch = null;
     startPan();
@@ -974,18 +1033,6 @@ gestureEl.addEventListener('pointerup', endPointer);
 gestureEl.addEventListener('pointercancel', endPointer);
 gestureEl.addEventListener('pointerleave', endPointer);
 
-gestureEl.addEventListener('wheel', (e) => {
-  e.preventDefault();
-  followMode = false;
-  el.locateBtn.classList.remove('bn-active');
-  const zoomDelta = -e.deltaY * 0.002;
-  const rawZoom = map.getZoom() + zoomDelta;
-  const newZoom = Math.min(Math.max(rawZoom, map.getMinZoom()), map.getMaxZoom());
-  const anchor = screenPointToContainerPoint({ x: e.clientX, y: e.clientY });
-  if (isFinite(anchor.x) && isFinite(anchor.y) && isFinite(newZoom)) {
-    map.setZoomAround(anchor, newZoom, { animate: false });
-  }
-}, { passive: false });
 
 el.fullscreenBtn.addEventListener('click', () => {
   if (!document.fullscreenElement){
@@ -1038,7 +1085,7 @@ function handlePosition(pos){
   }
   const data = {
     lat: c.latitude, lon: c.longitude,
-    speed: c.speed != null && !isNaN(c.speed) ? c.speed : 0,
+    speed: c.speed != null && !isNaN(c.speed) ? c.speed : 0, // m/s
     heading: heading != null && !isNaN(heading) ? heading : (state.lastPosition ? state.lastPosition.heading : 0),
     accuracy: c.accuracy,
     timestamp: pos.timestamp
@@ -1052,7 +1099,7 @@ function handlePosition(pos){
   updateAccuracyCircle(latlng, data.accuracy);
   renderPosition(data);
 
-  if (followMode) map.setView(latlng, map.getZoom() < 5 ? 14 : map.getZoom(), { animate: false });
+  if (followMode) map.setView(latlng, map.getZoom() < 5 ? 14 : map.getZoom(), { animate: true });
   if (state.headingLock) rotateMap(data.heading);
 
   state.positionListeners.forEach(cb => {
@@ -1081,7 +1128,7 @@ function startGps(){
 startGps();
 
 /* ======================================================================
-   ÖFFENTLICHE MODUL-API
+   ÖFFENTLICHE MODUL-API — window.BootNav
    ====================================================================== */
 
 function renderModuleList(){
@@ -1150,57 +1197,93 @@ function mountWidget(container, id, contentOrElement, wrapperClass){
 const BootNav = {
   VERSION: '1.0.0',
 
+  /**
+   * Registriert ein neues Modul und fügt einen Eintrag in die Sidebar ein.
+   * config: { id, name, icon, description, onOpen?, settingsHtml?, sidebarMount? }
+   */
   registerModule(config){
-    if (!config || !config.id) return false;
+    if (!config || !config.id) {
+      console.error('BootNav.registerModule: config.id ist erforderlich');
+      return false;
+    }
+    if (state.modules.has(config.id)) {
+      console.warn(`BootNav: Modul "${config.id}" ist bereits registriert — wird überschrieben.`);
+    }
     state.modules.set(config.id, config);
     renderModuleList();
     showToast(`Modul „${config.name || config.id}“ registriert`, 'success');
     return true;
   },
 
+  /** Entfernt ein registriertes Modul. */
   unregisterModule(id){
     const removed = state.modules.delete(id);
     if (removed) renderModuleList();
     return removed;
   },
 
-  getMap(){ return map; },
+  /** Gibt die Leaflet-Karteninstanz zurück. */
+  getMap(){
+    return map;
+  },
 
+  /** Registriert einen Callback für GPS-Positionsupdates. Gibt eine Unsubscribe-Funktion zurück. */
   onPositionUpdate(callback){
     if (typeof callback !== 'function') return () => {};
     state.positionListeners.push(callback);
-    if (state.lastPosition) { try { callback(state.lastPosition); } catch(e){} }
+    if (state.lastPosition) { try { callback(state.lastPosition); } catch(e){ console.error(e); } }
     return () => {
       const idx = state.positionListeners.indexOf(callback);
       if (idx >= 0) state.positionListeners.splice(idx, 1);
     };
   },
 
-  getLastPosition(){ return state.lastPosition; },
+  /** Gibt die zuletzt bekannte Position zurück (oder null). */
+  getLastPosition(){
+    return state.lastPosition;
+  },
 
+  /** Fügt ein Widget im unteren HUD ein (oder aktualisiert es, falls id bereits existiert). */
   addHudWidget(id, htmlContentOrElement){
     return mountWidget(el.hudExt, id, htmlContentOrElement, 'bn-hud-cell');
   },
 
+  /** Entfernt ein HUD-Widget. */
   removeHudWidget(id){
     const node = el.hudExt.querySelector(`[data-widget-id="${id}"]`);
     if (node) node.remove();
   },
 
+  /** Fügt eine Info-Pill/Widget oben rechts auf der Karte ein. */
   addOverlayWidget(id, htmlContentOrElement){
     return mountWidget(el.overlayContainer, id, htmlContentOrElement, 'bn-overlay-pill');
   },
 
+  /** Entfernt ein Overlay-Widget. */
   removeOverlayWidget(id){
     const node = el.overlayContainer.querySelector(`[data-widget-id="${id}"]`);
     if (node) node.remove();
   },
 
-  openModal(title, contentHtml){ openModal(title, contentHtml); },
-  closeModal(){ closeModal(); },
-  showToast(message, kind){ showToast(message, kind); },
+  /** Öffnet das universelle Modal-Fenster mit individuellem Inhalt. */
+  openModal(title, contentHtml){
+    openModal(title, contentHtml);
+  },
+
+  /** Schließt das Modal-Fenster. */
+  closeModal(){
+    closeModal();
+  },
+
+  /** Zeigt eine kurze Toast-Benachrichtigung. kind: 'success' | 'warn' | 'error' (optional) */
+  showToast(message, kind){
+    showToast(message, kind);
+  },
+
+  /** Öffnet/schließt die Burger-Sidebar programmatisch. */
   openSidebar, closeSidebar,
 
+  /** Aktueller Theme- und Einheiten-Zustand (read-only Snapshot). */
   getState(){
     return {
       theme: state.theme,
@@ -1210,6 +1293,7 @@ const BootNav = {
     };
   },
 
+  /** Hilfsfunktion: konvertiert m/s in die aktuell gewählte Geschwindigkeitseinheit. */
   convertSpeed(speedMs){
     return state.speedUnit === 'kn' ? speedMs * NM_PER_MS_TO_KNOTS : speedMs * KMH_PER_MS;
   }
@@ -1218,8 +1302,11 @@ const BootNav = {
 window.BootNav = BootNav;
 renderModuleList();
 
+// Größenänderungen (z.B. Orientation-Wechsel) an Leaflet weiterreichen
 window.addEventListener('resize', () => { resizeRotator(); map.invalidateSize(); });
 window.addEventListener('orientationchange', () => setTimeout(() => { resizeRotator(); map.invalidateSize(); }, 250));
+
+console.log(`⚓ BootNav Core v${BootNav.VERSION} bereit. Module registrieren via window.BootNav.registerModule({...})`);
 
 })();
 </script>
