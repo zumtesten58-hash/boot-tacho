@@ -747,7 +747,7 @@ const map = L.map('bn-map', {
   dragging: true,
   touchZoom: true,
   tap: false,
-  zoomSnap: 0,        // Fix: kein Runden auf ganze Zoomstufen -> Pinch-Zoom reagiert stufenlos
+  zoomSnap: 1,        // Fix: Verhindert Kachel-Flackern und Ruckeln beim manuellen Zoomen
   zoomDelta: 1,        // Schrittweite für +/- Buttons bleibt 1 volle Stufe
   wheelPxPerZoomLevel: 120,
   maxZoom: 19,
