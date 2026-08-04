@@ -740,8 +740,12 @@ const map = L.map('bn-map', {
   zoomControl: false,
   attributionControl: false, // eigenes, unrotiertes Label (#bn-attribution) wird genutzt
   worldCopyJump: true,
-  dragging: false,   // wir übernehmen Pan/Zoom/Rotation komplett selbst (siehe Gesten-Handling)
-  touchZoom: false,
+  // Solange NICHT gedreht wird, übernimmt Leaflets eigenes, ausgereiftes
+  // Pan/Pinch-Zoom (butterweich, mit sauberem Kachel-Crossfade — exakt wie in
+  // echten Navi-Apps). Nur während einer aktiven Dreh-Geste schalten wir auf
+  // eigenes Handling um (siehe setNativeInteractionEnabled / Gesten-Handling).
+  dragging: true,
+  touchZoom: true,
   tap: false,
   zoomSnap: 0,        // Fix: kein Runden auf ganze Zoomstufen -> Pinch-Zoom reagiert stufenlos
   zoomDelta: 1,        // Schrittweite für +/- Buttons bleibt 1 volle Stufe
@@ -749,6 +753,11 @@ const map = L.map('bn-map', {
   maxZoom: 19,
   minZoom: 3
 }).setView([54.3233, 10.1228], 12); // Startpunkt: Kieler Förde als sinnvoller maritimer Default
+
+function setNativeInteractionEnabled(on){
+  if (on){ map.dragging.enable(); map.touchZoom.enable(); }
+  else { map.dragging.disable(); map.touchZoom.disable(); }
+}
 
 const TILE_LAYERS = {
   street: L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -865,6 +874,10 @@ function updateRotatorTransform(){ scheduleTransformUpdate(); }
 function rotateMap(deg){
   state.mapRotation = normalizeDeg(deg);
   updateRotatorTransform();
+  // Nur bei exakt 0° (Nord oben) ist Leaflets natives, ruckelfreies Pan/Zoom
+  // sicher nutzbar — die CSS-Rotation würde sonst dessen eigene Touch-Koordinaten
+  // verfälschen. Bei jeder Drehung != 0 bleibt/wird das eigene Handling aktiv.
+  setNativeInteractionEnabled(state.mapRotation === 0);
   // Boot-Icon gegen die Kartenrotation ausgleichen, damit es aufrecht bleibt
   if (boatMarker){
     const iconEl = boatMarker.getElement();
@@ -885,13 +898,16 @@ function rotateMap(deg){
    ====================================================================== */
 const gestureEl = document.getElementById('bn-map'); // nur die Kartenfläche selbst, nicht Buttons/Overlay
 const activePointers = new Map(); // pointerId -> {x,y}
-let panLast = null;               // letzte Position für 1-Finger-Pan
-let pinch = null;                 // { lastDist, lastAngle, lastMid, startDist, startZoom }
+let panLast = null;               // letzte Position für 1-Finger-Pan (nur wenn natives Dragging aus ist)
+let pinch = null;                 // { lastDist, lastAngle, lastMid, startDist, startAngle, startZoom }
+const ROTATE_THRESHOLD_DEG = 6;   // ab dieser Fingerverdrehung wird aus "nur zoomen" ein Dreh-Vorgang
 
 function angleDeg(a, b){ return Math.atan2(b.y - a.y, b.x - a.x) * 180 / Math.PI; }
 function dist(a, b){ return Math.hypot(b.x - a.x, b.y - a.y); }
 function midpoint(a, b){ return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }; }
 function clamp(v, lo, hi){ return Math.max(lo, Math.min(hi, v)); }
+// Winkel-Differenz mit korrektem Wraparound (z.B. 179° -> -179° = 2°, nicht 358°)
+function angularDiff(a, b){ let d = a - b; return ((d + 180) % 360 + 360) % 360 - 180; }
 
 // Wandelt einen Bewegungsvektor in Bildschirmkoordinaten in den entsprechenden
 // Vektor im (unrotierten) internen Koordinatensystem der Karte um.
@@ -921,20 +937,21 @@ function startPan(){
 function updatePinchBaseline(){
   const pts = [...activePointers.values()];
   const d0 = dist(pts[0], pts[1]);
+  const a0 = angleDeg(pts[0], pts[1]);
   pinch = {
-    lastDist: d0, lastAngle: angleDeg(pts[0], pts[1]), lastMid: midpoint(pts[0], pts[1]),
-    startDist: d0, startZoom: map.getZoom()
+    lastDist: d0, lastAngle: a0, lastMid: midpoint(pts[0], pts[1]),
+    startDist: d0, startAngle: a0, startZoom: map.getZoom()
   };
   livePinchScale = 1;
 }
 // Wendet den bisher per CSS vorgeschauten Zoom EINMALIG echt auf die Leaflet-Karte
-// an (statt bei jedem Frame) und setzt die Vorschau-Skalierung zurück.
+// an (mit sanfter Animation wie bei den +/- Buttons) und setzt die Vorschau zurück.
 function commitPinchZoom(){
   if (!pinch) return;
   if (livePinchScale !== 1){
     const finalZoom = pinch.startZoom + Math.log2(livePinchScale);
     const anchor = screenPointToContainerPoint(pinch.lastMid);
-    map.setZoomAround(anchor, finalZoom, { animate: false });
+    map.setZoomAround(anchor, finalZoom, { animate: true });
   }
   livePinchScale = 1;
   updateRotatorTransform();
@@ -955,17 +972,25 @@ function rebasePinchZoom(){
 
 gestureEl.addEventListener('pointerdown', (e) => {
   if (e.pointerType === 'mouse' && e.button !== 0) return;
-  gestureEl.setPointerCapture(e.pointerId);
   activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
   followMode = false;
   el.locateBtn.classList.remove('bn-active');
   if (activePointers.size === 1){
     commitPinchZoom();
     pinch = null;
-    startPan();
+    // Nur bei aktiver Eigensteuerung (Karte gedreht) selbst pannen —
+    // ansonsten übernimmt Leaflets natives Dragging (kein doppeltes Handling).
+    if (!map.dragging.enabled()){
+      gestureEl.setPointerCapture(e.pointerId);
+      startPan();
+    }
   } else if (activePointers.size === 2){
     panLast = null;
     updatePinchBaseline();
+    // Erst bei erkannter Dreh-Absicht übernehmen wir den Pointer manuell (siehe pointermove)
+    if (!map.touchZoom.enabled()){
+      try { gestureEl.setPointerCapture(e.pointerId); } catch(err){}
+    }
   }
 });
 
@@ -974,6 +999,7 @@ gestureEl.addEventListener('pointermove', (e) => {
   activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
 
   if (activePointers.size === 1 && panLast){
+    if (map.dragging.enabled()) return; // natives Dragging übernimmt bereits
     const p = [...activePointers.values()][0];
     const dxScreen = p.x - panLast.x, dyScreen = p.y - panLast.y;
     panLast = { x: p.x, y: p.y };
@@ -987,6 +1013,24 @@ gestureEl.addEventListener('pointermove', (e) => {
     const currentDist = dist(pts[0], pts[1]);
     const currentAngle = angleDeg(pts[0], pts[1]);
     const currentMid = midpoint(pts[0], pts[1]);
+
+    if (map.touchZoom.enabled()){
+      // Noch keine Dreh-Absicht erkannt: reine Pinch-Geste läuft komplett nativ
+      // über Leaflet (butterweich, kein Flackern) — wir prüfen nur den Dreh-Winkel.
+      const twist = angularDiff(currentAngle, pinch.startAngle);
+      pinch.lastDist = currentDist; pinch.lastAngle = currentAngle; pinch.lastMid = currentMid;
+      if (Math.abs(twist) >= ROTATE_THRESHOLD_DEG){
+        // Schwelle überschritten -> ab jetzt Karte drehen, dafür natives Handling
+        // sauber abgeben und ohne Sprung mit neuer Basis manuell weitermachen.
+        setNativeInteractionEnabled(false);
+        activePointers.forEach((_, id) => { try { gestureEl.setPointerCapture(id); } catch(err){} });
+        pinch.startDist = currentDist; pinch.startAngle = currentAngle; pinch.startZoom = map.getZoom();
+        livePinchScale = 1;
+      }
+      return;
+    }
+
+    // Ab hier: Karte ist gedreht bzw. wird gerade gedreht -> volle Eigensteuerung
 
     // 1) Verschieben entlang der Mittelpunkt-Bewegung (rotationskorrigiert)
     const dxScreen = currentMid.x - pinch.lastMid.x, dyScreen = currentMid.y - pinch.lastMid.y;
@@ -1020,7 +1064,7 @@ function endPointer(e){
   if (wasPinching) commitPinchZoom(); // echten Zoom jetzt einmalig anwenden
   if (activePointers.size === 1){
     pinch = null;
-    startPan();
+    if (!map.dragging.enabled()) startPan();
   } else if (activePointers.size === 2){
     panLast = null;
     updatePinchBaseline();
