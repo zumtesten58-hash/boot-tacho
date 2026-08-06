@@ -4,12 +4,13 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>⚓ BootNav</title>
+<link rel="icon" type="image/png" href="logo.png">
 <meta name="theme-color" content="#0a1420">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
 <style>
 /* ======================================================================
    BOOTNAV — BASIS-MODUL
-   Design: dunkles Marine-Theme, Glasmorphismus, Touch-firsttest
+   Design: dunkles Marine-Theme, Glasmorphismus, Touch-first
    ====================================================================== */
 
 :root{
@@ -122,6 +123,9 @@ button{font-family:inherit;}
   font-size:16px; letter-spacing:0.3px; white-space:nowrap; overflow:hidden;
 }
 #bn-brand .bn-logo-mark{font-size:19px; filter:drop-shadow(0 0 6px rgba(32,201,168,.5));}
+#bn-brand img.bn-logo-mark, .bn-sidebar-head img.bn-logo-mark{
+  height:22px; width:auto; display:block; filter:drop-shadow(0 0 6px rgba(32,201,168,.35));
+}
 #bn-brand .bn-brand-sub{
   font-size:9.5px; font-weight:600; color:var(--bn-fg-faint);
   letter-spacing:1.5px; text-transform:uppercase; display:block; margin-top:-2px;
@@ -443,7 +447,7 @@ button:focus-visible, .bn-map-btn:focus-visible, .bn-icon-btn:focus-visible{
     <div class="bn-header-side">
       <button id="bn-burger-btn" class="bn-icon-btn" aria-label="Menü öffnen" title="Menü">☰</button>
       <div id="bn-brand">
-        <span class="bn-logo-mark">⚓</span>
+        <img class="bn-logo-mark" src="logo.png" alt="" onerror="this.outerHTML='&lt;span class=&quot;bn-logo-mark&quot;&gt;⚓&lt;/span&gt;';">
         <div id="bn-brand-text">
           <span>BootNav</span>
           <span class="bn-brand-sub">Marine Navigation</span>
@@ -509,7 +513,7 @@ button:focus-visible, .bn-map-btn:focus-visible, .bn-icon-btn:focus-visible{
 <div id="bn-sidebar-scrim"></div>
 <aside id="bn-sidebar" aria-label="Modul-Menü">
   <div class="bn-sidebar-head">
-    <h2>⚓ BootNav</h2>
+    <h2><img class="bn-logo-mark" src="logo.png" alt="" onerror="this.outerHTML='⚓';"> BootNav</h2>
     <button class="bn-sidebar-close" id="bn-sidebar-close-btn" aria-label="Menü schließen">✕</button>
   </div>
   <div class="bn-sidebar-section">
