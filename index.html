@@ -158,11 +158,12 @@ button{font-family:inherit;}
 #bn-map-rotator{
   position:absolute; top:50%; left:50%;
   width:180vmax; height:180vmax; /* per JS sofort auf echte Bildschirmdiagonale + Marge korrigiert */
-  transform:translate(-50%,-50%);
+  transform:translate3d(-50%,-50%,0);
+  backface-visibility:hidden; -webkit-backface-visibility:hidden;
   transform-origin:50% 50%;
   will-change:transform;
 }
-#bn-map{position:absolute; inset:0; background:var(--bn-deep-900);}
+#bn-map{position:absolute; inset:0; background:#0f3552;} /* Wasser-Ton statt Schwarz -> Ladelücken fallen kaum auf */
 #bn-map-rotator, #bn-map{ touch-action:none; } /* eigenes Gesten-Handling, kein Browser-Scroll/Zoom */
 
 #bn-attribution{
@@ -172,7 +173,6 @@ button{font-family:inherit;}
   padding:2px 7px; border-radius:6px; pointer-events:none;
   border:1px solid var(--bn-line);
 }
-#bn-map{position:absolute; inset:0; background:var(--bn-deep-900);}
 
 .leaflet-control-attribution{ display:none !important; } /* eigenes, unrotiertes #bn-attribution wird stattdessen genutzt */
 .leaflet-control-zoom{display:none;} /* eigene Zoom-Controls */
@@ -838,11 +838,10 @@ function updateAccuracyCircle(latlng, accuracyMeters){
 }
 
 /* ---------------- Rotator-Hülle: immer bildschirmfüllend ---------------- */
-// Damit beim Drehen keine leeren Ecken sichtbar werden, ist die Hülle mindestens
-// so groß wie die Bildschirmdiagonale und wird bei jeder Größenänderung neu berechnet.
-// Zusätzliche Marge, da während einer Pinch-Geste kurzzeitig eine CSS-Vorschau-
-// Skalierung < 1 (Rauszoomen) angewendet wird — ohne Marge würde das die Hülle
-// unter die Deckungsgröße schrumpfen und schwarze Ränder freilegen.
+// Damit beim Drehen/Zoomen NIE leere/schwarze Ränder sichtbar werden, ist die Hülle
+// bewusst großzügig überdimensioniert (fester Sicherheitsfaktor statt knapper
+// Diagonal-Formel) — das kostet etwas mehr Kacheln im Speicher, ist aber die
+// zuverlässigste Variante gegen Rundungs-/Timing-Fehler bei jeder Bildschirmgröße.
 const PINCH_SCALE_MIN = 0.85;
 const PINCH_SCALE_MAX = 1.25;
 const rotatorEl = document.getElementById('bn-map-rotator');
@@ -850,26 +849,42 @@ let rotatorSize = 0;
 function resizeRotator(){
   const rect = el.bnMain.getBoundingClientRect();
   if (!rect.width || !rect.height) return; // Layout noch nicht bereit -> nichts tun
-  const diag = Math.ceil(Math.sqrt(rect.width * rect.width + rect.height * rect.height)) + 60;
-  rotatorSize = Math.ceil(diag / PINCH_SCALE_MIN); // deckt auch bei kleinster Vorschau-Skalierung
+  const largerSide = Math.max(rect.width, rect.height);
+  rotatorSize = Math.ceil(largerSide * 2.4); // großzügige Marge für Rotation + Pinch-Vorschau
   rotatorEl.style.width = rotatorSize + 'px';
   rotatorEl.style.height = rotatorSize + 'px';
   map.invalidateSize();
 }
 resizeRotator();
-// Zusätzlich per ResizeObserver überwachen (zuverlässiger als nur 'resize' —
-// erfasst auch Layout-Änderungen durch Browser-UI, Zoomstufe des Betriebssystems,
-// Web-Font-Nachladen, Sidebar/Adressleiste ein-/ausblenden etc.)
+// Zusätzlich per ResizeObserver + visualViewport überwachen (zuverlässiger als nur
+// 'resize' — erfasst auch Layout-Änderungen durch Browser-UI, Adressleiste ein-/
+// ausblenden auf Mobilgeräten, Web-Font-Nachladen etc.)
 if ('ResizeObserver' in window){
   new ResizeObserver(() => resizeRotator()).observe(el.bnMain);
+}
+if (window.visualViewport){
+  window.visualViewport.addEventListener('resize', resizeRotator);
 }
 // Einmal verzögert nachziehen, falls beim allerersten Aufruf das Layout (Header/HUD-
 // Höhe, sichere Bereiche) noch nicht final eingerastet war.
 requestAnimationFrame(() => setTimeout(resizeRotator, 60));
 
 /* ---------------- Map-Controls ---------------- */
-el.zoomInBtn.addEventListener('click', () => map.setZoom(map.getZoom() + 1, { animate: true }));
-el.zoomOutBtn.addEventListener('click', () => map.setZoom(map.getZoom() - 1, { animate: true }));
+// Leaflets eingebaute Zoom-Animation geht intern von einem unrotierten Container
+// aus (sie berechnet ihre Transform-Herkunft über die normale, unrotierte Position).
+// Ist die Karte per CSS gedreht, rechnet diese Animation falsch -> "zerrissenes"
+// bzw. kurzzeitig schwarzes Bild. Deshalb: animiert NUR bei Rotation 0°, sonst
+// sofort (ohne Leaflet-Animation) anwenden.
+function safeSetZoom(newZoom, anchorContainerPoint){
+  const animate = state.mapRotation === 0;
+  if (anchorContainerPoint){
+    map.setZoomAround(anchorContainerPoint, newZoom, { animate });
+  } else {
+    map.setZoom(newZoom, { animate });
+  }
+}
+el.zoomInBtn.addEventListener('click', () => safeSetZoom(map.getZoom() + 1));
+el.zoomOutBtn.addEventListener('click', () => safeSetZoom(map.getZoom() - 1));
 
 let followMode = true;
 el.locateBtn.addEventListener('click', () => {
@@ -894,7 +909,7 @@ function scheduleTransformUpdate(){
   transformFrameQueued = true;
   requestAnimationFrame(() => {
     transformFrameQueued = false;
-    rotatorEl.style.transform = `translate(-50%,-50%) rotate(${-state.mapRotation}deg) scale(${livePinchScale})`;
+    rotatorEl.style.transform = `translate3d(-50%,-50%,0) rotate(${-state.mapRotation}deg) scale(${livePinchScale})`;
   });
 }
 function updateRotatorTransform(){ scheduleTransformUpdate(); }
@@ -978,7 +993,7 @@ function commitPinchZoom(){
   if (livePinchScale !== 1){
     const finalZoom = pinch.startZoom + Math.log2(livePinchScale);
     const anchor = screenPointToContainerPoint(pinch.lastMid);
-    map.setZoomAround(anchor, finalZoom, { animate: true });
+    map.setZoomAround(anchor, finalZoom, { animate: state.mapRotation === 0 });
   }
   livePinchScale = 1;
   updateRotatorTransform();
