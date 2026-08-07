@@ -6,7 +6,7 @@
 <title>⚓ BootNav</title>
 <link rel="icon" type="image/png" href="logo.png">
 <meta name="theme-color" content="#0a1420">
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
 <style>
 /* ======================================================================
    BOOTNAV — BASIS-MODUL
@@ -151,20 +151,11 @@ button{font-family:inherit;}
 /* ---------- Main / Map ---------- */
 #bn-main{position:relative; flex:1; min-height:0; overflow:hidden;}
 
-/* Die Rotator-Hülle ist bewusst größer als der Viewport (Diagonale), damit beim
-   Drehen keine Lücken an den Bildschirm-Ecken entstehen — wie bei Google Maps
-   dreht sich immer eine überdimensionierte Fläche, sichtbar bleibt nur der
-   von #bn-main geclippte Ausschnitt in der Mitte. */
-#bn-map-rotator{
-  position:absolute; top:50%; left:50%;
-  width:180vmax; height:180vmax; /* per JS sofort auf echte Bildschirmdiagonale + Marge korrigiert */
-  transform:translate3d(-50%,-50%,0);
-  backface-visibility:hidden; -webkit-backface-visibility:hidden;
-  transform-origin:50% 50%;
-  will-change:transform;
-}
+/* MapLibre GL rendert die Karte per WebGL direkt in dieses Canvas-Element.
+   Drehen/Zoomen/Pinch laufen nativ über die Kamera-Matrix — kein CSS-Transform-
+   Trick auf einer überdimensionierten Hülle mehr nötig (dadurch auch keine
+   schwarzen Ränder oder Flacker-Effekte wie zuvor bei der Leaflet-Lösung). */
 #bn-map{position:absolute; inset:0; background:#0f3552;} /* Wasser-Ton statt Schwarz -> Ladelücken fallen kaum auf */
-#bn-map-rotator, #bn-map{ touch-action:none; } /* eigenes Gesten-Handling, kein Browser-Scroll/Zoom */
 
 #bn-attribution{
   position:absolute; left:6px; bottom:6px; z-index:410;
@@ -173,9 +164,6 @@ button{font-family:inherit;}
   padding:2px 7px; border-radius:6px; pointer-events:none;
   border:1px solid var(--bn-line);
 }
-
-.leaflet-control-attribution{ display:none !important; } /* eigenes, unrotiertes #bn-attribution wird stattdessen genutzt */
-.leaflet-control-zoom{display:none;} /* eigene Zoom-Controls */
 
 .bn-boat-marker{
   display:flex; align-items:center; justify-content:center;
@@ -465,9 +453,7 @@ button:focus-visible, .bn-map-btn:focus-visible, .bn-icon-btn:focus-visible{
 
   <!-- ============ MAIN / MAP ============ -->
   <main id="bn-main">
-    <div id="bn-map-rotator">
-      <div id="bn-map"></div>
-    </div>
+    <div id="bn-map"></div>
     <div id="bn-attribution">© <span id="bn-attribution-text">OpenStreetMap-Mitwirkende</span></div>
 
     <div class="bn-offline-banner" id="bn-offline-banner">📡 Offline — letzte bekannte Kartenkacheln</div>
@@ -568,7 +554,7 @@ button:focus-visible, .bn-map-btn:focus-visible, .bn-icon-btn:focus-visible{
 <!-- ============ TOASTS ============ -->
 <div id="bn-toast-stack"></div>
 
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
 <script>
 (function(){
 "use strict";
@@ -739,385 +725,150 @@ document.addEventListener('visibilitychange', () => {
   if (saved === '1') applyWakeLockSetting(true);
 })();
 
-/* ---------------- Leaflet Karte ---------------- */
-const map = L.map('bn-map', {
-  zoomControl: false,
-  attributionControl: false, // eigenes, unrotiertes Label (#bn-attribution) wird genutzt
-  worldCopyJump: true,
-  // Solange NICHT gedreht wird, übernimmt Leaflets eigenes, ausgereiftes
-  // Pan/Pinch-Zoom (butterweich, mit sauberem Kachel-Crossfade — exakt wie in
-  // echten Navi-Apps). Nur während einer aktiven Dreh-Geste schalten wir auf
-  // eigenes Handling um (siehe setNativeInteractionEnabled / Gesten-Handling).
-  dragging: true,
-  touchZoom: true,
-  tap: false,
-  zoomSnap: 0,        // Fix: kein Runden auf ganze Zoomstufen -> Pinch-Zoom reagiert stufenlos
-  zoomDelta: 1,        // Schrittweite für +/- Buttons bleibt 1 volle Stufe
-  zoomAnimation: true,  // sanfter CSS-Übergang statt hartem Sprung (wie Google Maps)
-  fadeAnimation: true,  // neue Kacheln blenden ein statt hart zu erscheinen
-  wheelPxPerZoomLevel: 120,
-  maxZoom: 19,
-  minZoom: 3
-}).setView([54.3233, 10.1228], 12); // Startpunkt: Kieler Förde als sinnvoller maritimer Default
+/* ---------------- MapLibre GL Karte (WebGL) ----------------
+   Ersetzt die vorherige Leaflet-Raster-Lösung samt selbstgebauter CSS-Dreh-
+   Hülle und Gesten-Simulation. MapLibre rendert per WebGL — Verschieben,
+   Zoomen und Drehen (auch per Zwei-Finger-Geste) sind nativ eingebaut,
+   GPU-beschleunigt und laufen ohne die vorherigen Flacker-/Schwarzbild-/
+   Rand-Probleme, weil nichts mehr per CSS gedreht oder skaliert wird. */
 
-function setNativeInteractionEnabled(on){
-  if (on){ map.dragging.enable(); map.touchZoom.enable(); }
-  else { map.dragging.disable(); map.touchZoom.disable(); }
-}
-
-// Gemeinsame Kachel-Optionen für beide Layer:
-// - updateWhenZooming:false -> während der Zoom-Bewegung wird NICHT versucht, schon
-//   neue Kacheln nachzuladen (Hauptursache für Flackern/Schwarzflächen). Stattdessen
-//   zeigt Leaflet die bereits geladenen alten Kacheln sanft skaliert an und lädt die
-//   scharfen neuen erst NACH Abschluss der Bewegung nach — wie bei Google Maps.
-// - keepBuffer stark erhöht -> deutlich mehr Kacheln bleiben im Cache, dadurch sind
-//   beim Rauszoomen/Schwenken viel öfter schon fertige Kacheln da statt Leerflächen.
-const COMMON_TILE_OPTIONS = {
-  maxZoom: 19,
-  crossOrigin: true,
-  updateWhenZooming: false,
-  keepBuffer: 6,
-  updateWhenIdle: false
+const SATELLITE_STYLE = {
+  version: 8,
+  sources: {
+    esri: {
+      type: 'raster',
+      tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'],
+      tileSize: 256,
+      maxzoom: 19
+    }
+  },
+  layers: [{ id: 'esri-satellite', type: 'raster', source: 'esri' }]
 };
-
-const TILE_LAYERS = {
-  street: L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', COMMON_TILE_OPTIONS),
-  satellite: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', COMMON_TILE_OPTIONS)
-};
+const STREET_STYLE_URL = 'https://tiles.openfreemap.org/styles/liberty'; // kostenlos, kein API-Key nötig
 const TILE_ATTRIBUTIONS = {
-  street: 'OpenStreetMap-Mitwirkende',
+  street: 'OpenStreetMap-Mitwirkende · OpenFreeMap',
   satellite: 'Esri, Maxar, Earthstar Geographics'
 };
 let activeLayerId = 'street';
-TILE_LAYERS.street.addTo(map);
 
+const map = new maplibregl.Map({
+  container: 'bn-map',
+  style: STREET_STYLE_URL,
+  center: [10.1228, 54.3233], // [lon, lat] — Kieler Förde als sinnvoller maritimer Default
+  zoom: 12,
+  minZoom: 3,
+  maxZoom: 19,
+  attributionControl: false, // eigenes, festes Label (#bn-attribution) wird genutzt
+  dragRotate: true,          // Drehen per Maus (rechte Taste + ziehen)
+  touchZoomRotate: true,     // Pinch-Zoom + Zwei-Finger-Drehen nativ, GPU-beschleunigt
+  touchPitch: false,         // kein 3D-Neigen — bewusst 2D-Kartennavigation
+  pitchWithRotate: false,
+  antialias: true
+});
+map.touchZoomRotate.enableRotation(); // Zwei-Finger-Drehen wie in echten Navi-Apps
+
+/* ---------------- GPS-Genauigkeitskreis (GeoJSON-Layer) ---------------- */
+function addAccuracyLayer(){
+  if (map.getSource('bn-accuracy')) return;
+  map.addSource('bn-accuracy', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+  map.addLayer({
+    id: 'bn-accuracy-fill', type: 'fill', source: 'bn-accuracy',
+    paint: { 'fill-color': '#20c9a8', 'fill-opacity': 0.08 }
+  });
+  map.addLayer({
+    id: 'bn-accuracy-line', type: 'line', source: 'bn-accuracy',
+    paint: { 'line-color': '#20c9a8', 'line-width': 1 }
+  });
+}
+// Erzeugt ein Polygon, das näherungsweise einen Kreis mit `radiusMeters` um [lon,lat] beschreibt.
+function circleFeature(lon, lat, radiusMeters, steps){
+  steps = steps || 64;
+  const coords = [];
+  const distRad = radiusMeters / 6371000; // Erdradius in Metern
+  const latRad = lat * Math.PI / 180, lonRad = lon * Math.PI / 180;
+  for (let i = 0; i <= steps; i++){
+    const bearing = (i / steps) * 2 * Math.PI;
+    const lat2 = Math.asin(Math.sin(latRad) * Math.cos(distRad) + Math.cos(latRad) * Math.sin(distRad) * Math.cos(bearing));
+    const lon2 = lonRad + Math.atan2(
+      Math.sin(bearing) * Math.sin(distRad) * Math.cos(latRad),
+      Math.cos(distRad) - Math.sin(latRad) * Math.sin(lat2)
+    );
+    coords.push([lon2 * 180 / Math.PI, lat2 * 180 / Math.PI]);
+  }
+  return { type: 'Feature', geometry: { type: 'Polygon', coordinates: [coords] }, properties: {} };
+}
+function updateAccuracyCircle(lon, lat, radiusMeters){
+  if (radiusMeters == null || isNaN(radiusMeters)) return;
+  const src = map.getSource('bn-accuracy');
+  if (!src) return;
+  src.setData(circleFeature(lon, lat, radiusMeters));
+}
+map.on('load', addAccuracyLayer);
+
+/* ---------------- Karten-/Satelliten-Umschalter ---------------- */
 function setTileLayer(id){
-  if (id === activeLayerId || !TILE_LAYERS[id]) return;
-  map.removeLayer(TILE_LAYERS[activeLayerId]);
+  if (id === activeLayerId) return;
   activeLayerId = id;
-  TILE_LAYERS[activeLayerId].addTo(map);
+  map.setStyle(id === 'satellite' ? SATELLITE_STYLE : STREET_STYLE_URL);
+  map.once('idle', () => {
+    addAccuracyLayer();
+    if (state.lastPosition) updateAccuracyCircle(state.lastPosition.lon, state.lastPosition.lat, state.lastPosition.accuracy);
+  });
   el.attributionText.textContent = TILE_ATTRIBUTIONS[activeLayerId];
   el.layerBtn.textContent = activeLayerId === 'satellite' ? '🗺️' : '🛰️';
 }
 el.layerBtn.addEventListener('click', () => setTileLayer(activeLayerId === 'street' ? 'satellite' : 'street'));
 
-// Boot-Icon (SVG, dreht sich mit Kurs)
+/* ---------------- Boot-Marker ---------------- */
+// Boot-Icon (SVG) als eigenes DOM-Element — MapLibre positioniert und dreht es
+// nativ passend zur Kamera (rotationAlignment:'map' hält die reale Kompass-
+// Ausrichtung bei, auch wenn die Karte selbst gedreht wird).
 function boatIconHtml(){
   return `<div class="bn-boat-marker"><svg viewBox="0 0 34 34" xmlns="http://www.w3.org/2000/svg">
     <circle cx="17" cy="17" r="15" fill="rgba(32,201,168,0.16)"/>
     <path d="M17 3 L25 26 L17 21 L9 26 Z" fill="#20c9a8" stroke="#04211c" stroke-width="1"/>
   </svg></div>`;
 }
-const boatIcon = L.divIcon({ html: boatIconHtml(), className: '', iconSize: [34,34], iconAnchor: [17,17] });
-let boatMarker = null;
-let accuracyCircle = null;
+const boatWrap = document.createElement('div');
+boatWrap.innerHTML = boatIconHtml();
+const boatMarker = new maplibregl.Marker({ element: boatWrap.firstElementChild, rotationAlignment: 'map', pitchAlignment: 'map' });
+let boatMarkerAdded = false;
 
-function ensureBoatMarker(latlng){
-  if (!boatMarker){
-    boatMarker = L.marker(latlng, { icon: boatIcon, zIndexOffset: 1000 }).addTo(map);
-  } else {
-    boatMarker.setLatLng(latlng);
-  }
+function ensureBoatMarker(lon, lat){
+  boatMarker.setLngLat([lon, lat]);
+  if (!boatMarkerAdded){ boatMarker.addTo(map); boatMarkerAdded = true; }
 }
 function updateBoatHeading(headingDeg){
-  if (!boatMarker) return;
-  const iconEl = boatMarker.getElement();
-  if (iconEl) {
-    const svg = iconEl.querySelector('svg');
-    if (svg) svg.style.transform = `rotate(${headingDeg}deg)`;
-  }
+  boatMarker.setRotation(headingDeg || 0);
 }
-function updateAccuracyCircle(latlng, accuracyMeters){
-  if (accuracyMeters == null || isNaN(accuracyMeters)) return;
-  if (!accuracyCircle){
-    accuracyCircle = L.circle(latlng, { radius: accuracyMeters, className: 'bn-accuracy-circle', weight:1, color:'#20c9a8', fillColor:'#20c9a8', fillOpacity:0.08 }).addTo(map);
-  } else {
-    accuracyCircle.setLatLng(latlng);
-    accuracyCircle.setRadius(accuracyMeters);
-  }
-}
-
-/* ---------------- Rotator-Hülle: immer bildschirmfüllend ---------------- */
-// Damit beim Drehen/Zoomen NIE leere/schwarze Ränder sichtbar werden, ist die Hülle
-// bewusst großzügig überdimensioniert (fester Sicherheitsfaktor statt knapper
-// Diagonal-Formel) — das kostet etwas mehr Kacheln im Speicher, ist aber die
-// zuverlässigste Variante gegen Rundungs-/Timing-Fehler bei jeder Bildschirmgröße.
-const PINCH_SCALE_MIN = 0.85;
-const PINCH_SCALE_MAX = 1.25;
-const rotatorEl = document.getElementById('bn-map-rotator');
-let rotatorSize = 0;
-function resizeRotator(){
-  const rect = el.bnMain.getBoundingClientRect();
-  if (!rect.width || !rect.height) return; // Layout noch nicht bereit -> nichts tun
-  const largerSide = Math.max(rect.width, rect.height);
-  rotatorSize = Math.ceil(largerSide * 2.4); // großzügige Marge für Rotation + Pinch-Vorschau
-  rotatorEl.style.width = rotatorSize + 'px';
-  rotatorEl.style.height = rotatorSize + 'px';
-  map.invalidateSize();
-}
-resizeRotator();
-// Zusätzlich per ResizeObserver + visualViewport überwachen (zuverlässiger als nur
-// 'resize' — erfasst auch Layout-Änderungen durch Browser-UI, Adressleiste ein-/
-// ausblenden auf Mobilgeräten, Web-Font-Nachladen etc.)
-if ('ResizeObserver' in window){
-  new ResizeObserver(() => resizeRotator()).observe(el.bnMain);
-}
-if (window.visualViewport){
-  window.visualViewport.addEventListener('resize', resizeRotator);
-}
-// Einmal verzögert nachziehen, falls beim allerersten Aufruf das Layout (Header/HUD-
-// Höhe, sichere Bereiche) noch nicht final eingerastet war.
-requestAnimationFrame(() => setTimeout(resizeRotator, 60));
 
 /* ---------------- Map-Controls ---------------- */
-// Leaflets eingebaute Zoom-Animation geht intern von einem unrotierten Container
-// aus (sie berechnet ihre Transform-Herkunft über die normale, unrotierte Position).
-// Ist die Karte per CSS gedreht, rechnet diese Animation falsch -> "zerrissenes"
-// bzw. kurzzeitig schwarzes Bild. Deshalb: animiert NUR bei Rotation 0°, sonst
-// sofort (ohne Leaflet-Animation) anwenden.
-function safeSetZoom(newZoom, anchorContainerPoint){
-  const animate = state.mapRotation === 0;
-  if (anchorContainerPoint){
-    map.setZoomAround(anchorContainerPoint, newZoom, { animate });
-  } else {
-    map.setZoom(newZoom, { animate });
-  }
-}
-el.zoomInBtn.addEventListener('click', () => safeSetZoom(map.getZoom() + 1));
-el.zoomOutBtn.addEventListener('click', () => safeSetZoom(map.getZoom() - 1));
+el.zoomInBtn.addEventListener('click', () => map.zoomIn({ duration: 250 }));
+el.zoomOutBtn.addEventListener('click', () => map.zoomOut({ duration: 250 }));
 
 let followMode = true;
 el.locateBtn.addEventListener('click', () => {
   followMode = true;
   el.locateBtn.classList.add('bn-active');
-  if (state.lastPosition) map.setView([state.lastPosition.lat, state.lastPosition.lon], Math.max(map.getZoom(), 14));
+  if (state.lastPosition){
+    map.easeTo({ center: [state.lastPosition.lon, state.lastPosition.lat], zoom: Math.max(map.getZoom(), 14), duration: 400 });
+  }
 });
+map.on('dragstart', () => { followMode = false; el.locateBtn.classList.remove('bn-active'); });
 
 el.compassBtn.addEventListener('click', () => {
   state.headingLock = !state.headingLock;
   el.compassBtn.classList.toggle('bn-active', state.headingLock);
   showToast(state.headingLock ? 'Kartenausrichtung: Kurs oben' : 'Kartenausrichtung: Nord oben', 'success');
-  if (!state.headingLock) rotateMap(0);
+  if (!state.headingLock) map.easeTo({ bearing: 0, duration: 400 });
 });
-function normalizeDeg(d){ d = d % 360; return d < 0 ? d + 360 : d; }
-let livePinchScale = 1; // CSS-Vorschau-Skalierung während einer laufenden Pinch-Geste
-let transformFrameQueued = false;
-// Bündelt Transform-Schreibvorgänge auf höchstens einen pro Bildschirm-Frame,
-// statt bei jedem einzelnen Touch-Move-Event sofort das DOM zu ändern -> ruckelt weniger.
-function scheduleTransformUpdate(){
-  if (transformFrameQueued) return;
-  transformFrameQueued = true;
-  requestAnimationFrame(() => {
-    transformFrameQueued = false;
-    rotatorEl.style.transform = `translate3d(-50%,-50%,0) rotate(${-state.mapRotation}deg) scale(${livePinchScale})`;
-  });
-}
-function updateRotatorTransform(){ scheduleTransformUpdate(); }
-function rotateMap(deg){
-  state.mapRotation = normalizeDeg(deg);
-  updateRotatorTransform();
-  // Nur bei exakt 0° (Nord oben) ist Leaflets natives, ruckelfreies Pan/Zoom
-  // sicher nutzbar — die CSS-Rotation würde sonst dessen eigene Touch-Koordinaten
-  // verfälschen. Bei jeder Drehung != 0 bleibt/wird das eigene Handling aktiv.
-  setNativeInteractionEnabled(state.mapRotation === 0);
-  // Boot-Icon gegen die Kartenrotation ausgleichen, damit es aufrecht bleibt
-  if (boatMarker){
-    const iconEl = boatMarker.getElement();
-    const svg = iconEl && iconEl.querySelector('svg');
-    if (svg) svg.style.transform = `rotate(${state.lastPosition ? (state.lastPosition.heading || 0) : 0}deg)`;
-  }
-}
-
-/* ======================================================================
-   EIGENES GESTEN-HANDLING (ersetzt natives Leaflet Dragging/TouchZoom)
-   — 1 Finger: Verschieben (rotationskorrigiert)
-   — 2 Finger: Pinch-Zoom + Dreh-Geste gleichzeitig, wie in Maps-Apps üblich
-   Fix Schwarzbild/Ruckeln: der eigentliche Leaflet-Zoom (der Kacheln neu lädt)
-   wird während der Geste NICHT bei jedem Fingertick aufgerufen, sondern nur
-   "committet", sobald die CSS-Vorschau-Skalierung eine feste Ober-/Untergrenze
-   erreicht (PINCH_SCALE_MIN/MAX) oder die Geste endet — dazwischen läuft nur
-   eine günstige, pro Frame gebündelte CSS-Skalierung.
-   ====================================================================== */
-const gestureEl = document.getElementById('bn-map'); // nur die Kartenfläche selbst, nicht Buttons/Overlay
-const activePointers = new Map(); // pointerId -> {x,y}
-let panLast = null;               // letzte Position für 1-Finger-Pan (nur wenn natives Dragging aus ist)
-let pinch = null;                 // { lastDist, lastAngle, lastMid, startDist, startAngle, startZoom }
-const ROTATE_THRESHOLD_DEG = 6;   // ab dieser Fingerverdrehung wird aus "nur zoomen" ein Dreh-Vorgang
-
-function angleDeg(a, b){ return Math.atan2(b.y - a.y, b.x - a.x) * 180 / Math.PI; }
-function dist(a, b){ return Math.hypot(b.x - a.x, b.y - a.y); }
-function midpoint(a, b){ return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }; }
-function clamp(v, lo, hi){ return Math.max(lo, Math.min(hi, v)); }
-// Winkel-Differenz mit korrektem Wraparound (z.B. 179° -> -179° = 2°, nicht 358°)
-function angularDiff(a, b){ let d = a - b; return ((d + 180) % 360 + 360) % 360 - 180; }
-
-// Wandelt einen Bewegungsvektor in Bildschirmkoordinaten in den entsprechenden
-// Vektor im (unrotierten) internen Koordinatensystem der Karte um.
-function screenDeltaToMapDelta(dx, dy){
-  const rad = state.mapRotation * Math.PI / 180;
-  const cos = Math.cos(rad), sin = Math.sin(rad);
-  return { x: dx * cos - dy * sin, y: dx * sin + dy * cos };
-}
-// Wandelt einen Bildschirmpunkt in den lokalen (unrotierten) Container-Punkt der
-// Leaflet-Karte um — nötig, damit Pinch-Zoom exakt zwischen den Fingern verankert.
-// Referenzpunkt ist stets das unrotierte #bn-main (= Rotationszentrum).
-function screenPointToContainerPoint(pt){
-  const rect = el.bnMain.getBoundingClientRect();
-  const cx = rect.left + rect.width / 2, cy = rect.top + rect.height / 2;
-  const rad = state.mapRotation * Math.PI / 180;
-  const cos = Math.cos(rad), sin = Math.sin(rad);
-  const vx = pt.x - cx, vy = pt.y - cy;
-  const localX = vx * cos - vy * sin;
-  const localY = vx * sin + vy * cos;
-  return L.point(rotatorSize / 2 + localX, rotatorSize / 2 + localY);
-}
-
-function startPan(){
-  const [p] = activePointers.values();
-  panLast = p ? { x: p.x, y: p.y } : null;
-}
-function updatePinchBaseline(){
-  const pts = [...activePointers.values()];
-  const d0 = dist(pts[0], pts[1]);
-  const a0 = angleDeg(pts[0], pts[1]);
-  pinch = {
-    lastDist: d0, lastAngle: a0, lastMid: midpoint(pts[0], pts[1]),
-    startDist: d0, startAngle: a0, startZoom: map.getZoom()
-  };
-  livePinchScale = 1;
-}
-// Wendet den bisher per CSS vorgeschauten Zoom EINMALIG echt auf die Leaflet-Karte
-// an (mit sanfter Animation wie bei den +/- Buttons) und setzt die Vorschau zurück.
-function commitPinchZoom(){
-  if (!pinch) return;
-  if (livePinchScale !== 1){
-    const finalZoom = pinch.startZoom + Math.log2(livePinchScale);
-    const anchor = screenPointToContainerPoint(pinch.lastMid);
-    map.setZoomAround(anchor, finalZoom, { animate: state.mapRotation === 0 });
-  }
-  livePinchScale = 1;
-  updateRotatorTransform();
-}
-// Wie commitPinchZoom, setzt die Geste danach aber sofort mit neuer Basis fort
-// (kein Abbruch) — wird genutzt, wenn die Vorschau-Skalierung ihre Grenze erreicht,
-// damit lange Pinch-Gesten nie zu extreme CSS-Werte annehmen und zwischendurch
-// bereits echte Kacheln nachladen können.
-function rebasePinchZoom(){
-  if (!pinch) return;
-  const finalZoom = pinch.startZoom + Math.log2(livePinchScale);
-  const anchor = screenPointToContainerPoint(pinch.lastMid);
-  map.setZoomAround(anchor, finalZoom, { animate: false });
-  pinch.startZoom = map.getZoom();
-  pinch.startDist = pinch.lastDist;
-  livePinchScale = 1;
-}
-
-gestureEl.addEventListener('pointerdown', (e) => {
-  if (e.pointerType === 'mouse' && e.button !== 0) return;
-  activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
-  followMode = false;
-  el.locateBtn.classList.remove('bn-active');
-  if (activePointers.size === 1){
-    commitPinchZoom();
-    pinch = null;
-    // Nur bei aktiver Eigensteuerung (Karte gedreht) selbst pannen —
-    // ansonsten übernimmt Leaflets natives Dragging (kein doppeltes Handling).
-    if (!map.dragging.enabled()){
-      gestureEl.setPointerCapture(e.pointerId);
-      startPan();
-    }
-  } else if (activePointers.size === 2){
-    panLast = null;
-    updatePinchBaseline();
-    // Erst bei erkannter Dreh-Absicht übernehmen wir den Pointer manuell (siehe pointermove)
-    if (!map.touchZoom.enabled()){
-      try { gestureEl.setPointerCapture(e.pointerId); } catch(err){}
-    }
-  }
+// Kompass-Icon dreht optisch mit der aktuellen Kartenausrichtung mit
+map.on('rotate', () => {
+  const svg = el.compassBtn.querySelector('svg');
+  if (svg) svg.style.transform = `rotate(${-map.getBearing()}deg)`;
+  state.mapRotation = map.getBearing();
 });
 
-gestureEl.addEventListener('pointermove', (e) => {
-  if (!activePointers.has(e.pointerId)) return;
-  activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
-
-  if (activePointers.size === 1 && panLast){
-    if (map.dragging.enabled()) return; // natives Dragging übernimmt bereits
-    const p = [...activePointers.values()][0];
-    const dxScreen = p.x - panLast.x, dyScreen = p.y - panLast.y;
-    panLast = { x: p.x, y: p.y };
-    const d = screenDeltaToMapDelta(dxScreen, dyScreen);
-    // Inhalt soll dem Finger folgen (Papier-Metapher); panBy nutzt die
-    // entgegengesetzte, kameraseitige Konvention -> negieren.
-    map.panBy([-d.x, -d.y], { animate: false, duration: 0, noMoveStart: true });
-
-  } else if (activePointers.size === 2 && pinch){
-    const pts = [...activePointers.values()];
-    const currentDist = dist(pts[0], pts[1]);
-    const currentAngle = angleDeg(pts[0], pts[1]);
-    const currentMid = midpoint(pts[0], pts[1]);
-
-    if (map.touchZoom.enabled()){
-      // Noch keine Dreh-Absicht erkannt: reine Pinch-Geste läuft komplett nativ
-      // über Leaflet (butterweich, kein Flackern) — wir prüfen nur den Dreh-Winkel.
-      const twist = angularDiff(currentAngle, pinch.startAngle);
-      pinch.lastDist = currentDist; pinch.lastAngle = currentAngle; pinch.lastMid = currentMid;
-      if (Math.abs(twist) >= ROTATE_THRESHOLD_DEG){
-        // Schwelle überschritten -> ab jetzt Karte drehen, dafür natives Handling
-        // sauber abgeben und ohne Sprung mit neuer Basis manuell weitermachen.
-        setNativeInteractionEnabled(false);
-        activePointers.forEach((_, id) => { try { gestureEl.setPointerCapture(id); } catch(err){} });
-        pinch.startDist = currentDist; pinch.startAngle = currentAngle; pinch.startZoom = map.getZoom();
-        livePinchScale = 1;
-      }
-      return;
-    }
-
-    // Ab hier: Karte ist gedreht bzw. wird gerade gedreht -> volle Eigensteuerung
-
-    // 1) Verschieben entlang der Mittelpunkt-Bewegung (rotationskorrigiert)
-    const dxScreen = currentMid.x - pinch.lastMid.x, dyScreen = currentMid.y - pinch.lastMid.y;
-    const d = screenDeltaToMapDelta(dxScreen, dyScreen);
-    map.panBy([-d.x, -d.y], { animate: false, duration: 0, noMoveStart: true });
-
-    // 2) Drehen entsprechend der Fingerverdrehung (nur CSS, kein Kachel-Neuladen)
-    const angleDelta = currentAngle - pinch.lastAngle;
-    state.mapRotation = normalizeDeg(state.mapRotation - angleDelta);
-
-    // 3) Zoom-Vorschau nur per CSS-Skalierung (kein Leaflet-Zoom, kein Kachel-Neuladen
-    //    während der Geste — das verhindert den Schwarzbild-Effekt)
-    pinch.lastDist = currentDist; pinch.lastAngle = currentAngle; pinch.lastMid = currentMid;
-    if (isFinite(currentDist) && currentDist > 0 && pinch.startDist > 0){
-      livePinchScale = clamp(currentDist / pinch.startDist, PINCH_SCALE_MIN, PINCH_SCALE_MAX);
-    }
-    updateRotatorTransform();
-
-    // Grenze erreicht (sehr schnelles/langes Pinchen) -> zwischendurch echt anwenden,
-    // damit die Skalierung nie extrem wird und neue Kacheln rechtzeitig laden.
-    if (livePinchScale <= PINCH_SCALE_MIN || livePinchScale >= PINCH_SCALE_MAX){
-      rebasePinchZoom();
-    }
-  }
-});
-
-function endPointer(e){
-  const wasPinching = activePointers.size === 2;
-  activePointers.delete(e.pointerId);
-  try { gestureEl.releasePointerCapture(e.pointerId); } catch(err){}
-  if (wasPinching) commitPinchZoom(); // echten Zoom jetzt einmalig anwenden
-  if (activePointers.size === 1){
-    pinch = null;
-    if (!map.dragging.enabled()) startPan();
-  } else if (activePointers.size === 2){
-    panLast = null;
-    updatePinchBaseline();
-  } else {
-    panLast = null;
-    pinch = null;
-  }
-}
-gestureEl.addEventListener('pointerup', endPointer);
-gestureEl.addEventListener('pointercancel', endPointer);
-gestureEl.addEventListener('pointerleave', endPointer);
 
 
 el.fullscreenBtn.addEventListener('click', () => {
@@ -1179,14 +930,13 @@ function handlePosition(pos){
   state.lastPosition = data;
   setGpsStatus('live', 'GPS aktiv');
 
-  const latlng = [data.lat, data.lon];
-  ensureBoatMarker(latlng);
+  ensureBoatMarker(data.lon, data.lat);
   updateBoatHeading(data.heading);
-  updateAccuracyCircle(latlng, data.accuracy);
+  updateAccuracyCircle(data.lon, data.lat, data.accuracy);
   renderPosition(data);
 
-  if (followMode) map.setView(latlng, map.getZoom() < 5 ? 14 : map.getZoom(), { animate: true });
-  if (state.headingLock) rotateMap(data.heading);
+  if (followMode) map.easeTo({ center: [data.lon, data.lat], zoom: map.getZoom() < 5 ? 14 : map.getZoom(), duration: 500 });
+  if (state.headingLock) map.easeTo({ bearing: data.heading, duration: 400 });
 
   state.positionListeners.forEach(cb => {
     try { cb(data); } catch(err){ console.error('BootNav: Fehler in onPositionUpdate-Callback', err); }
@@ -1308,7 +1058,7 @@ const BootNav = {
     return removed;
   },
 
-  /** Gibt die Leaflet-Karteninstanz zurück. */
+  /** Gibt die MapLibre-GL-Karteninstanz zurück. */
   getMap(){
     return map;
   },
@@ -1388,9 +1138,11 @@ const BootNav = {
 window.BootNav = BootNav;
 renderModuleList();
 
-// Größenänderungen (z.B. Orientation-Wechsel) an Leaflet weiterreichen
-window.addEventListener('resize', () => { resizeRotator(); map.invalidateSize(); });
-window.addEventListener('orientationchange', () => setTimeout(() => { resizeRotator(); map.invalidateSize(); }, 250));
+// Größenänderungen (z.B. Orientation-Wechsel) an MapLibre weiterreichen
+// (MapLibre beobachtet die Container-Größe zwar bereits selbst, ein expliziter
+// Aufruf schadet nicht und fängt Sonderfälle ab).
+window.addEventListener('resize', () => map.resize());
+window.addEventListener('orientationchange', () => setTimeout(() => map.resize(), 250));
 
 console.log(`⚓ BootNav Core v${BootNav.VERSION} bereit. Module registrieren via window.BootNav.registerModule({...})`);
 
