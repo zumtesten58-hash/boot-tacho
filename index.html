@@ -1047,8 +1047,7 @@ const BootNav = {
     }
     state.modules.set(config.id, config);
     renderModuleList();
-    showToast(`Modul „${config.name || config.id}“ registriert`, 'success');
-    return true;
+        return true;
   },
 
   /** Entfernt ein registriertes Modul. */
@@ -1148,7 +1147,6 @@ console.log(`⚓ BootNav Core v${BootNav.VERSION} bereit. Module registrieren vi
 
 })();
 </script>
-<script src="avg-speed.js"></script>
 <script src="weather.js"></script>
 <script src="speed-stats.js"></script>
 </body>
