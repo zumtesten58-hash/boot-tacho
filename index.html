@@ -10,6 +10,8 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="BootNav">
+<link rel="apple-touch-icon" href="logo.png">
+<link rel="apple-touch-icon" sizes="180x180" href="logo.png">
 <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
 <style>
 /* ======================================================================
@@ -423,7 +425,7 @@ button{font-family:inherit;}
      unten rechts bleibt er daumenerreichbar und kollidiert mit nichts mehr. */
   #bn-map-controls{
     flex-direction:row;
-    bottom:calc(3px + var(--bn-hud-h) + var(--bn-safe-bottom));
+    bottom:calc(var(--bn-hud-h) + var(--bn-safe-bottom));
     right:calc(8px + var(--bn-safe-right));
     gap:6px;
   }
