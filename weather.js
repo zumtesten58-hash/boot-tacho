@@ -8,7 +8,7 @@
   let lastFetchLon = null;
   let lastFetchTime = 0;
   const FETCH_INTERVAL_MS = 10 * 60 * 1000; // 10 Minuten Intervall
-  const MIN_DIST_FETCH_KM = 2.0; // Min. 2 km Bewegung für Aktualisierung
+  const MIN_DIST_FETCH_KM = 2.0;
 
   // WMO Wettercodes Übersetzung & Symbolik
   function getWeatherInfo(code, isDay = 1) {
@@ -45,7 +45,6 @@
     return map[code] || { text: 'Unbekannt', icon: '🌡️' };
   }
 
-  // Grad in Windrichtung (Himmelsrichtung) umrechnen
   function getWindDir(deg) {
     if (deg == null || isNaN(deg)) return '';
     const dirs = ['N', 'NNO', 'NO', 'ONO', 'O', 'OSO', 'SO', 'SSO', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
@@ -53,7 +52,6 @@
     return dirs[idx];
   }
 
-  // Haversine Distanz zur Positionsprüfung
   function getDistanceKm(lat1, lon1, lat2, lon2) {
     const R = 6371;
     const dLat = (lat2 - lat1) * Math.PI / 180;
@@ -64,7 +62,6 @@
     return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   }
 
-  // Wetterdaten von Open-Meteo abrufen
   async function fetchWeather(lat, lon) {
     const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,apparent_temperature,is_day,precipitation,weather_code,cloud_cover,wind_speed_10m,wind_direction_10m,wind_gusts_10m&hourly=temperature_2m,precipitation_probability,precipitation,weather_code,wind_speed_10m,wind_gusts_10m&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,wind_speed_10m_max,wind_gusts_10m_max&wind_speed_unit=ms&timezone=auto`;
 
@@ -81,11 +78,10 @@
     }
   }
 
-  // Kurzübersicht in der Karte oben rechts
   function updateOverlayWidget() {
     if (!weatherData || !weatherData.current) {
       BootNav.addOverlayWidget('weather-pill', `
-        <span style="cursor:pointer;" id="bn-weather-btn">🌤️ Wetter wird geladen…</span>
+        <span style="cursor:pointer;" id="bn-weather-btn">🌤️ Wetter geladen…</span>
       `);
       return;
     }
@@ -96,7 +92,6 @@
     const windConverted = BootNav.convertSpeed(curr.wind_speed_10m).toFixed(0);
     const windUnit = state.speedUnit === 'kn' ? 'kn' : 'km/h';
 
-    // Unwetter- / Starkwindwarnung (ab ~22 kn / Bft 6+)
     const isStormy = curr.weather_code >= 95 || curr.wind_gusts_10m >= 13.8 || curr.wind_speed_10m >= 10.8;
     let alertBadge = '';
     if (curr.weather_code >= 95) {
@@ -120,7 +115,6 @@
     }
   }
 
-  // Ausführlicher Wetterbericht im Modal
   function openWeatherModal() {
     if (!weatherData) {
       BootNav.openModal('Wetterbericht', '<p>Keine Wetterdaten verfügbar. Warte auf GPS-Signal...</p>');
@@ -148,12 +142,12 @@
       const hProb = hourly.precipitation_probability ? hourly.precipitation_probability[i] : 0;
 
       hourlyHtml += `
-        <div style="display:flex; flex-direction:column; align-items:center; min-width:58px; padding:8px 4px; background:rgba(255,255,255,0.03); border:1px solid var(--bn-line); border-radius:var(--bn-radius-s); text-align:center;">
+        <div style="display:flex; flex-direction:column; align-items:center; min-width:64px; padding:10px 6px; background:rgba(255,255,255,0.03); border:1px solid var(--bn-line); border-radius:var(--bn-radius-m); text-align:center; flex-shrink:0;">
           <span style="font-size:11px; color:var(--bn-fg-faint); font-weight:600;">${timeStr}</span>
-          <span style="font-size:20px; margin:3px 0;">${hInfo.icon}</span>
-          <span style="font-weight:700; font-size:13px;">${hourly.temperature_2m[i].toFixed(0)}°</span>
-          <span style="font-size:10px; color:var(--bn-info); margin-top:2px;">💧 ${hProb}%</span>
-          <span style="font-size:10px; color:var(--bn-fg-dim); margin-top:1px;">💨 ${hWind}</span>
+          <span style="font-size:22px; margin:4px 0;">${hInfo.icon}</span>
+          <span style="font-weight:700; font-size:14px;">${hourly.temperature_2m[i].toFixed(0)}°</span>
+          <span style="font-size:10.5px; color:var(--bn-info); margin-top:4px; font-weight:600;">💧 ${hProb}%</span>
+          <span style="font-size:10px; color:var(--bn-fg-dim); margin-top:2px;">💨 ${hWind}</span>
         </div>
       `;
     }
@@ -168,30 +162,37 @@
       const dGusts = BootNav.convertSpeed(daily.wind_gusts_10m_max[d]).toFixed(0);
 
       dailyHtml += `
-        <tr>
-          <td style="font-weight:600;">${dayName}</td>
-          <td style="text-align:center; font-size:18px;">${dInfo.icon}</td>
-          <td style="font-size:12px; color:var(--bn-fg-dim);">${dInfo.text}</td>
-          <td style="text-align:right; font-weight:700;">${daily.temperature_2m_max[d].toFixed(0)}° / <span style="color:var(--bn-fg-faint); font-weight:normal;">${daily.temperature_2m_min[d].toFixed(0)}°</span></td>
-          <td style="text-align:right; color:var(--bn-info); font-size:12px;">💧 ${daily.precipitation_sum[d].toFixed(1)} mm</td>
-          <td style="text-align:right; font-size:12px;">💨 ${dWind} (${dGusts}) ${speedUnit}</td>
+        <tr style="border-bottom: 1px solid var(--bn-line);">
+          <td style="padding: 10px 6px; font-weight:600; white-space:nowrap;">${dayName}</td>
+          <td style="padding: 10px 4px; text-align:center; font-size:20px;">${dInfo.icon}</td>
+          <td style="padding: 10px 6px; font-size:12px; color:var(--bn-fg-dim);">${dInfo.text}</td>
+          <td style="padding: 10px 6px; text-align:right; font-weight:700; white-space:nowrap;">${daily.temperature_2m_max[d].toFixed(0)}° <span style="color:var(--bn-fg-faint); font-weight:normal;">/ ${daily.temperature_2m_min[d].toFixed(0)}°</span></td>
+          <td style="padding: 10px 6px; text-align:right; color:var(--bn-info); font-size:12px; white-space:nowrap;">💧 ${daily.precipitation_sum[d].toFixed(1)} mm</td>
+          <td style="padding: 10px 6px; text-align:right; font-size:12px; white-space:nowrap;">💨 ${dWind} <span style="color:var(--bn-fg-faint);">(${dGusts})</span> <span style="font-size:10px; color:var(--bn-fg-faint);">${speedUnit}</span></td>
         </tr>
       `;
     }
 
     const modalContent = `
+      <style>
+        .bn-weather-hourly::-webkit-scrollbar { height: 5px; }
+        .bn-weather-hourly::-webkit-scrollbar-track { background: rgba(0,0,0,0.1); border-radius: 4px; }
+        .bn-weather-hourly::-webkit-scrollbar-thumb { background: var(--bn-line-strong); border-radius: 4px; }
+        .bn-weather-hourly::-webkit-scrollbar-thumb:hover { background: var(--bn-fg-faint); }
+      </style>
+
       <div style="display:flex; flex-direction:column; gap:16px;">
         
         <!-- Aktueller Wetter-Kopf -->
-        <div style="background:rgba(255,255,255,0.04); border:1px solid var(--bn-line-strong); padding:14px; border-radius:var(--bn-radius-m); display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px;">
-          <div style="display:flex; align-items:center; gap:12px;">
-            <span style="font-size:42px; line-height:1;">${currInfo.icon}</span>
+        <div style="background:rgba(255,255,255,0.035); border:1px solid var(--bn-line-strong); padding:14px 16px; border-radius:var(--bn-radius-m); display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px;">
+          <div style="display:flex; align-items:center; gap:14px;">
+            <span style="font-size:44px; line-height:1;">${currInfo.icon}</span>
             <div>
-              <div style="font-size:26px; font-weight:800; line-height:1;">${curr.temperature_2m.toFixed(1)} °C</div>
-              <div style="font-size:12px; color:var(--bn-fg-dim); margin-top:2px;">Gefühlt ${curr.apparent_temperature.toFixed(1)} °C • ${currInfo.text}</div>
+              <div style="font-size:28px; font-weight:800; line-height:1;">${curr.temperature_2m.toFixed(1)} °C</div>
+              <div style="font-size:12px; color:var(--bn-fg-dim); margin-top:4px;">Gefühlt ${curr.apparent_temperature.toFixed(1)} °C • ${currInfo.text}</div>
             </div>
           </div>
-          <div style="font-size:12px; border-left:1px solid var(--bn-line); padding-left:12px; display:flex; flex-direction:column; gap:4px;">
+          <div style="font-size:12px; border-left:1px solid var(--bn-line); padding-left:14px; display:flex; flex-direction:column; gap:4px;">
             <div>💨 <strong>Wind:</strong> ${currWind} ${speedUnit} (${currDir} ${curr.wind_direction_10m}°)</div>
             <div>🌪️ <strong>Böen:</strong> ${currGusts} ${speedUnit}</div>
             <div>💧 <strong>Feuchte:</strong> ${curr.relative_humidity_2m}%</div>
@@ -201,25 +202,25 @@
 
         <!-- 24h Stündlicher Verlauf -->
         <div>
-          <div style="font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:1px; color:var(--bn-fg-faint); margin-bottom:8px;">Nächste 24 Stunden</div>
-          <div style="display:flex; gap:8px; overflow-x:auto; padding-bottom:6px;">
+          <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:1.1px; color:var(--bn-fg-faint); margin-bottom:8px;">Nächste 24 Stunden</div>
+          <div class="bn-weather-hourly" style="display:flex; gap:8px; overflow-x:auto; padding-bottom:8px; scroll-behavior:smooth;">
             ${hourlyHtml}
           </div>
         </div>
 
         <!-- 7-Tage Vorschau -->
         <div>
-          <div style="font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:1px; color:var(--bn-fg-faint); margin-bottom:8px;">7-Tage Vorhersage</div>
+          <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:1.1px; color:var(--bn-fg-faint); margin-bottom:8px;">7-Tage Vorhersage</div>
           <div style="overflow-x:auto;">
             <table style="width:100%; border-collapse:collapse; font-size:12.5px;">
               <thead>
-                <tr style="color:var(--bn-fg-faint); font-size:10.5px; text-transform:uppercase;">
-                  <th style="text-align:left; padding-bottom:6px;">Tag</th>
-                  <th style="text-align:center; padding-bottom:6px;"></th>
-                  <th style="text-align:left; padding-bottom:6px;">Wetter</th>
-                  <th style="text-align:right; padding-bottom:6px;">Temp</th>
-                  <th style="text-align:right; padding-bottom:6px;">Regen</th>
-                  <th style="text-align:right; padding-bottom:6px;">Wind (Böen)</th>
+                <tr style="color:var(--bn-fg-faint); font-size:10.5px; text-transform:uppercase; border-bottom:1px solid var(--bn-line-strong);">
+                  <th style="text-align:left; padding:6px;">Tag</th>
+                  <th style="text-align:center; padding:6px;"></th>
+                  <th style="text-align:left; padding:6px;">Wetter</th>
+                  <th style="text-align:right; padding:6px;">Temp</th>
+                  <th style="text-align:right; padding:6px;">Regen</th>
+                  <th style="text-align:right; padding:6px;">Wind (Böen)</th>
                 </tr>
               </thead>
               <tbody>
@@ -233,6 +234,63 @@
     `;
 
     BootNav.openModal('⚓ Wetterbericht', modalContent);
+
+    // Touch-Grip & Drag-down-to-close Logik aktivieren
+    setTimeout(() => {
+      const grip = document.querySelector('.bn-modal-grip');
+      const head = document.querySelector('.bn-modal-head');
+      const modal = document.getElementById('bn-modal');
+      if (!modal) return;
+
+      if (grip) {
+        grip.style.cursor = 'grab';
+        grip.style.padding = '8px 0'; // Größere Trefferfläche
+        grip.title = 'Tippen oder nach unten streichen zum Schließen';
+        grip.addEventListener('click', () => BootNav.closeModal());
+      }
+
+      let startY = 0;
+      let currentY = 0;
+      let isDragging = false;
+
+      const onTouchStart = (e) => {
+        startY = e.touches ? e.touches[0].clientY : e.clientY;
+        isDragging = true;
+        modal.style.transition = 'none';
+      };
+
+      const onTouchMove = (e) => {
+        if (!isDragging) return;
+        currentY = e.touches ? e.touches[0].clientY : e.clientY;
+        const deltaY = currentY - startY;
+        if (deltaY > 0) {
+          modal.style.transform = `translateY(${deltaY}px)`;
+        }
+      };
+
+      const onTouchEnd = () => {
+        if (!isDragging) return;
+        isDragging = false;
+        modal.style.transition = 'transform 0.25s cubic-bezier(.32,.72,.35,1)';
+        const deltaY = currentY - startY;
+        
+        if (deltaY > 80) { // Mehr als 80px nach unten gezogen -> Schließen
+          BootNav.closeModal();
+          setTimeout(() => { modal.style.transform = ''; }, 300);
+        } else {
+          modal.style.transform = '';
+        }
+        startY = 0;
+        currentY = 0;
+      };
+
+      const targets = [grip, head].filter(Boolean);
+      targets.forEach(target => {
+        target.addEventListener('touchstart', onTouchStart, { passive: true });
+        target.addEventListener('touchmove', onTouchMove, { passive: true });
+        target.addEventListener('touchend', onTouchEnd);
+      });
+    }, 50);
   }
 
   // Modul registrieren
@@ -265,7 +323,6 @@
     }
   });
 
-  // Start-Check mit vorhandener Position
   const initialPos = BootNav.getLastPosition();
   if (initialPos) {
     fetchWeather(initialPos.lat, initialPos.lon);
