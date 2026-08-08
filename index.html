@@ -412,11 +412,27 @@ button{font-family:inherit;}
 
 /* ---------- Landscape-Anpassungen ---------- */
 @media (orientation:landscape) and (max-height:480px){
-  :root{--bn-header-h:44px; --bn-hud-h:60px;}
-  .bn-hud-value{font-size:16px;}
+  :root{--bn-header-h:42px; --bn-hud-h:56px;}
+  .bn-hud-value{font-size:15px;}
   .bn-hud-label{font-size:8px;}
-  .bn-hud-cell{padding:4px 12px; min-width:68px;}
-  #bn-map-controls{bottom:calc(10px + var(--bn-hud-h) + var(--bn-safe-bottom));}
+  .bn-hud-cell{padding:3px 10px; min-width:60px;}
+
+  /* Der senkrechte Button-Stapel (6 Buttons) passt im Querformat nicht mehr in
+     die knappe Höhe und lief oben aus dem sichtbaren Bereich heraus — dadurch
+     kollidierte er mit Header und Wetter-Pille. Als kompakte waagrechte Reihe
+     unten rechts bleibt er daumenerreichbar und kollidiert mit nichts mehr. */
+  #bn-map-controls{
+    flex-direction:row;
+    bottom:calc(8px + var(--bn-hud-h) + var(--bn-safe-bottom));
+    right:calc(8px + var(--bn-safe-right));
+    gap:6px;
+  }
+  .bn-map-btn{ width:36px; height:36px; font-size:15px; }
+  #bn-compass-btn svg{ width:16px; height:16px; }
+
+  /* Overlay-Pille(n) (z.B. Wetter) im Querformat etwas schmaler, damit sie in
+     der niedrigeren Kopfzeile nicht zu dominant wirken */
+  #bn-overlay-container{ max-width:min(46vw, 230px); top:calc(6px + var(--bn-safe-top)); right:calc(8px + var(--bn-safe-right)); }
 }
 
 /* ---------- Reduced Motion ---------- */
