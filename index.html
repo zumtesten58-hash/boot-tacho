@@ -6,6 +6,10 @@
 <title>⚓ BootNav</title>
 <link rel="icon" type="image/png" href="logo.png">
 <meta name="theme-color" content="#0a1420">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="BootNav">
 <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
 <style>
 /* ======================================================================
@@ -739,7 +743,11 @@ const SATELLITE_STYLE = {
       type: 'raster',
       tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'],
       tileSize: 256,
-      maxzoom: 19
+      // Bewusst konservativ: Esri hat nicht überall (v.a. Küsten-/Wasserflächen)
+      // Bildmaterial bis Zoom 19 — jenseits von maxzoom liefert der Server sonst
+      // "No Data"-Kacheln zurück. Mit maxzoom:17 skaliert MapLibre stattdessen
+      // automatisch die letzte echte Kachel hoch (leicht unscharf, aber nie leer).
+      maxzoom: 17
     }
   },
   layers: [{ id: 'esri-satellite', type: 'raster', source: 'esri' }]
@@ -871,12 +879,54 @@ map.on('rotate', () => {
 
 
 
+// Plattformübergreifende Vollbild-Helfer: die Fullscreen-API existiert in mehreren
+// herstellerspezifischen Varianten (Standard, WebKit für älteres/Desktop-Safari).
+// Auf iOS Safari (mobiler Browser-Tab) gibt es HERSTELLERSEITIG überhaupt keine
+// Fullscreen-API für normale Webseiten (nur einzelne <video>-Elemente unterstützen
+// das dort) — das ist eine Plattform-Einschränkung von Apple, kein Bug dieser App.
+// Einziger echter Weg zu einer chromelosen Vollbild-Ansicht auf iOS ist "Zum
+// Home-Bildschirm hinzufügen" (dank apple-mobile-web-app-capable Meta-Tag im
+// <head> startet die App dann ohne Safari-Leiste). Wir erkennen diesen Fall und
+// zeigen statt einer nutzlosen Fehlermeldung einen konkreten Hinweis dazu.
+function fsElement(){ return document.fullscreenElement || document.webkitFullscreenElement || null; }
+function fsSupported(){
+  const el = document.documentElement;
+  return !!(document.fullscreenEnabled || document.webkitFullscreenEnabled || el.requestFullscreen || el.webkitRequestFullscreen);
+}
+function isIosSafariBrowserTab(){
+  const ua = navigator.userAgent || '';
+  const isIos = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const isStandalone = window.navigator.standalone === true || window.matchMedia('(display-mode: standalone)').matches;
+  return isIos && !isStandalone;
+}
+function requestFs(el){
+  const fn = el.requestFullscreen || el.webkitRequestFullscreen;
+  return fn ? fn.call(el) : Promise.reject(new Error('Fullscreen API nicht verfügbar'));
+}
+function exitFs(){
+  const fn = document.exitFullscreen || document.webkitExitFullscreen;
+  return fn ? fn.call(document) : Promise.reject(new Error('Fullscreen API nicht verfügbar'));
+}
+function updateFullscreenBtn(){
+  el.fullscreenBtn.classList.toggle('bn-active', !!fsElement());
+}
+document.addEventListener('fullscreenchange', updateFullscreenBtn);
+document.addEventListener('webkitfullscreenchange', updateFullscreenBtn);
+
 el.fullscreenBtn.addEventListener('click', () => {
-  if (!document.fullscreenElement){
-    document.documentElement.requestFullscreen?.().catch(() => showToast('Vollbild nicht verfügbar', 'warn'));
-  } else {
-    document.exitFullscreen?.();
+  if (fsElement()){
+    exitFs().catch(() => {});
+    return;
   }
+  if (!fsSupported()){
+    if (isIosSafariBrowserTab()){
+      showToast('iOS erlaubt kein Vollbild im Browser — über „Teilen“ → „Zum Home-Bildschirm“ hinzufügen für Vollbild-Ansicht', 'warn');
+    } else {
+      showToast('Vollbild wird von diesem Browser nicht unterstützt', 'warn');
+    }
+    return;
+  }
+  requestFs(document.documentElement).catch(() => showToast('Vollbild nicht verfügbar', 'warn'));
 });
 
 /* ---------------- Offline-Erkennung ---------------- */
@@ -1138,10 +1188,23 @@ window.BootNav = BootNav;
 renderModuleList();
 
 // Größenänderungen (z.B. Orientation-Wechsel) an MapLibre weiterreichen
-// (MapLibre beobachtet die Container-Größe zwar bereits selbst, ein expliziter
-// Aufruf schadet nicht und fängt Sonderfälle ab).
-window.addEventListener('resize', () => map.resize());
-window.addEventListener('orientationchange', () => setTimeout(() => map.resize(), 250));
+// (MapLibre beobachtet die Container-Größe zwar bereits selbst per internem
+// ResizeObserver, zusätzliche explizite Trigger fangen aber Sonderfälle ab,
+// z.B. iOS-Adressleiste ein-/ausblenden oder verzögerte Layout-Umbrüche beim
+// Drehen des Geräts zwischen Hoch- und Querformat).
+function forceMapResize(){ map.resize(); }
+window.addEventListener('resize', forceMapResize);
+window.addEventListener('orientationchange', () => {
+  forceMapResize();
+  setTimeout(forceMapResize, 150);
+  setTimeout(forceMapResize, 400);
+});
+if ('ResizeObserver' in window){
+  new ResizeObserver(forceMapResize).observe(el.bnMain);
+}
+if (window.visualViewport){
+  window.visualViewport.addEventListener('resize', forceMapResize);
+}
 
 console.log(`⚓ BootNav Core v${BootNav.VERSION} bereit. Module registrieren via window.BootNav.registerModule({...})`);
 
