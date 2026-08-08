@@ -64,7 +64,7 @@
     const formattedAccel = formatAccel(currentAccel, state.speedUnit);
     const formattedMaxAccel = formatAccel(maxAccel, state.speedUnit);
 
-    BootNav.openModal('🚀 Geschwindigkeits-Analyse', `
+    BootNav.openModal('Geschwindigkeits-Analyse', `
       <div style="display: flex; flex-direction: column; gap: 14px;">
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
           <div style="background: rgba(255,255,255,0.035); padding: 12px; border-radius: var(--bn-radius-m); border: 1px solid var(--bn-line);">
@@ -97,12 +97,13 @@
           cursor: pointer;
           transition: opacity 0.2s;
         ">
-          🔄 Statistik zurücksetzen
+          Statistik zurücksetzen
         </button>
       </div>
     `);
 
     setTimeout(() => {
+      // Event-Listener für Reset-Button
       const btn = document.getElementById('bn-reset-speed-stats-btn');
       if (btn) {
         btn.addEventListener('click', () => {
@@ -119,6 +120,61 @@
           BootNav.closeModal();
         });
       }
+
+      // Balken oben (Grip) interaktiv machen & Wischgeste zum Schließen aktivieren
+      const grip = document.querySelector('.bn-modal-grip');
+      const head = document.querySelector('.bn-modal-head');
+      const modal = document.getElementById('bn-modal');
+      if (!modal) return;
+
+      if (grip) {
+        grip.style.cursor = 'grab';
+        grip.style.padding = '8px 0';
+        grip.title = 'Tippen oder nach unten streichen zum Schließen';
+        grip.addEventListener('click', () => BootNav.closeModal());
+      }
+
+      let startY = 0;
+      let currentY = 0;
+      let isDragging = false;
+
+      const onTouchStart = (e) => {
+        startY = e.touches ? e.touches[0].clientY : e.clientY;
+        isDragging = true;
+        modal.style.transition = 'none';
+      };
+
+      const onTouchMove = (e) => {
+        if (!isDragging) return;
+        currentY = e.touches ? e.touches[0].clientY : e.clientY;
+        const deltaY = currentY - startY;
+        if (deltaY > 0) {
+          modal.style.transform = `translateY(${deltaY}px)`;
+        }
+      };
+
+      const onTouchEnd = () => {
+        if (!isDragging) return;
+        isDragging = false;
+        modal.style.transition = 'transform 0.25s cubic-bezier(.32,.72,.35,1)';
+        const deltaY = currentY - startY;
+        
+        if (deltaY > 80) { // Mehr als 80px nach unten gezogen -> Schließen
+          BootNav.closeModal();
+          setTimeout(() => { modal.style.transform = ''; }, 300);
+        } else {
+          modal.style.transform = '';
+        }
+        startY = 0;
+        currentY = 0;
+      };
+
+      const targets = [grip, head].filter(Boolean);
+      targets.forEach(target => {
+        target.addEventListener('touchstart', onTouchStart, { passive: true });
+        target.addEventListener('touchmove', onTouchMove, { passive: true });
+        target.addEventListener('touchend', onTouchEnd);
+      });
     }, 50);
   }
 
@@ -126,7 +182,7 @@
   BootNav.registerModule({
     id: 'speed-stats-module',
     name: 'Geschwindigkeits-Analyse',
-    icon: '🚀',
+    icon: '',
     description: 'Erfasst Höchstgeschwindigkeit, Durchschnitt und Beschleunigung live.',
     onOpen: openStatsModal
   });
